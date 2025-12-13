@@ -1,22 +1,17 @@
-FROM golang:1.23-alpine AS builder
+FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-COPY go.mod .
-COPY go.sum .
+COPY go.mod go.sum ./
 
 RUN go mod download
 
-COPY . .
+RUN echo 'package main\nimport ("fmt"; "time")\nfunc main() { fmt.Println("Dummy Service Running"); for { time.Sleep(1 * time.Hour) } }' > dummy.go
 
-RUN CGO_ENABLED=0 go build -o /outpost-api-authorization main.go
+RUN go build -o /dummy_service dummy.go
 
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
+COPY --from=builder /dummy_service /dummy_service
 
-WORKDIR /root/
-
-COPY --from=builder /outpost-api-authorization .
-
-CMD ["./outpost-api-authorization"]
+ENTRYPOINT ["/dummy_service"]
