@@ -2,7 +2,6 @@ package auth
 
 import (
 	"crypto/rand"
-	"errors"
 	"fmt"
 )
 
@@ -11,14 +10,31 @@ type User struct {
 	Email string
 }
 
-var RegisteredUsers = make(map[string]bool)
+var RegisteredProviders = make(map[string]bool)
+
+type ErrDuplicateField struct {
+	Field string
+	Value string
+}
+
+func (e *ErrDuplicateField) Error() string {
+	return fmt.Sprintf("duplicate %s found: %s", e.Field, e.Value)
+}
 
 func CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
-	if RegisteredUsers[email] {
-		return &User{}, errors.New("duplicate email address found")
+	registrationKey := fmt.Sprintf("reg:%s:%s", email, providerType)
+	providerKeyPath := fmt.Sprintf("pkey:%s", providerKey)
+	checkFields := []struct {
+		Label string
+		Value string
+	}{
+		{"registrationKey", registrationKey},
+		{"providerKeyPath", providerKeyPath},
 	}
-	if RegisteredUsers[providerKey] {
-		return &User{}, errors.New("duplicate email address found")
+	for _, field := range checkFields {
+		if RegisteredProviders[field.Value] {
+			return nil, &ErrDuplicateField{Field: field.Label, Value: field.Value}
+		}
 	}
 	b := make([]byte, 8)
 	rand.Read(b)
@@ -27,7 +43,8 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 		ID:    id,
 		Email: email,
 	}
-	RegisteredUsers[email] = true
-	RegisteredUsers[providerKey] = true
+	for _, field := range checkFields {
+		RegisteredProviders[field.Value] = true
+	}
 	return
 }

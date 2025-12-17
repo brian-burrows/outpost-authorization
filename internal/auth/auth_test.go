@@ -1,25 +1,25 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 )
 
 func setup() {
-	RegisteredUsers = make(map[string]bool)
+	RegisteredProviders = make(map[string]bool)
 }
 
 func TestCreateUser(t *testing.T) {
 	setup()
-	providerType := "email"
+	userEmail := "user@example.com"
 	providerKey := "user@example.com"
-	credential := "password123"
-	user, err := CreateUser(providerKey, providerType, providerKey, credential)
+	user, err := CreateUser(userEmail, "email", providerKey, "password123")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 	if user.Email != providerKey {
-		t.Errorf("Expected email %s, got %s", providerKey, user.Email)
+		t.Errorf("Expected email %s, got %s", userEmail, user.Email)
 	}
 }
 
@@ -46,14 +46,17 @@ func TestCreateUserMakesUniqueIDs(t *testing.T) {
 
 func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
 	setup()
-	providerType := "email"
-	providerKey := "user@example.com"
-	credential := "password123"
+	email := "dup@example.com"
 
-	_, err := CreateUser(providerKey, providerType, providerKey, credential)
-	_, err = CreateUser(providerKey, providerType, providerKey, credential)
-	if err == nil {
-		t.Errorf("Expected duplicate email registration to raise an error")
+	CreateUser(email, "email", "key1", "pass")
+	_, err := CreateUser(email, "email", "key2", "pass")
+
+	var dupErr *ErrDuplicateField
+	if !errors.As(err, &dupErr) {
+		t.Fatalf("Expected ErrDuplicateField, got %T (%v)", err, err)
+	}
+	if dupErr.Field != "registrationKey" {
+		t.Errorf("Expected error on field 'email', got %s", dupErr.Field)
 	}
 }
 func TestCreateUserForbidsDuplicateProviderKeys(t *testing.T) {
@@ -65,5 +68,16 @@ func TestCreateUserForbidsDuplicateProviderKeys(t *testing.T) {
 	_, err = CreateUser("email-2@email.com", providerType, duplicateKey, credential)
 	if err == nil {
 		t.Errorf("Expected duplicate email registration to raise an error")
+	}
+}
+
+func TestCreateUserAllowsMultipleProviderTypesPerEmail(t *testing.T) {
+	email := "email-1@email.com"
+	providers := map[string]string{"A": "1", "B": "2", "C": "3"}
+	for pType, pKey := range providers {
+		_, err := CreateUser(email, pType, pKey, "password123")
+		if err != nil {
+			t.Errorf("Failed to register %s: %v", pType, err)
+		}
 	}
 }
