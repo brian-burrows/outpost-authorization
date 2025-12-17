@@ -21,6 +21,13 @@ func (e *ErrDuplicateField) Error() string {
 	return fmt.Sprintf("duplicate %s found: %s", e.Field, e.Value)
 }
 
+func makeRandomIdentifier() (id string) {
+	b := make([]byte, 8)
+	rand.Read(b)
+	id = fmt.Sprintf("%x", b)
+	return
+}
+
 func CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
 	registrationKey := fmt.Sprintf("reg:%s:%s", email, providerType)
 	providerKeyPath := fmt.Sprintf("pkey:%s", providerKey)
@@ -36,9 +43,7 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 			return nil, &ErrDuplicateField{Field: field.Label, Value: field.Value}
 		}
 	}
-	b := make([]byte, 8)
-	rand.Read(b)
-	id := fmt.Sprintf("%x", b)
+	id := makeRandomIdentifier()
 	user = &User{
 		ID:    id,
 		Email: email,
