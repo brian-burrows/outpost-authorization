@@ -53,15 +53,15 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 	if err := validateProviderKey(providerKey); err != nil {
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
-	registrationKey := fmt.Sprintf("reg:%s:%s", email, providerType)
-	providerKeyPath := fmt.Sprintf("pkey:%s", providerKey)
+	registrationKey := fmt.Sprintf("reg:%s", email)
+	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
 	// Check if a registered user exists
 	checkFields := []struct {
 		Label string
 		Value string
 	}{
-		{"registrationKey", registrationKey},
-		{"providerKeyPath", providerKeyPath},
+		{"email", registrationKey},
+		{"providerInfo", providerKeyPath},
 	}
 	for _, field := range checkFields {
 		if RegisteredProviders[field.Value] {

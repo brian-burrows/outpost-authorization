@@ -55,7 +55,7 @@ func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
 	if !errors.As(err, &dupErr) {
 		t.Fatalf("Expected ErrDuplicateField, got %T (%v)", err, err)
 	}
-	if dupErr.Field != "registrationKey" {
+	if dupErr.Field != "email" {
 		t.Errorf("Expected error on field 'email', got %s", dupErr.Field)
 	}
 }
@@ -71,13 +71,15 @@ func TestCreateUserForbidsDuplicateProviderKeys(t *testing.T) {
 	}
 }
 
-func TestCreateUserAllowsMultipleProviderTypesPerEmail(t *testing.T) {
+func TestCreateUserForbidsAddingNewProviderTypes(t *testing.T) {
+	setup()
 	email := "email-1@email.com"
+	CreateUser("email-1@email.com", "firstProviderType", "randomkey", "credential")
 	providers := map[string]string{"A": "1", "B": "2", "C": "3"}
 	for pType, pKey := range providers {
-		_, err := CreateUser(email, pType, pKey, "password123")
-		if err != nil {
-			t.Errorf("Failed to register %s: %v", pType, err)
+		_, err := CreateUser(email, pType, pKey, "credential")
+		if err == nil {
+			t.Errorf("adding a new provider type using create user function should fail %s: %v", pType, err)
 		}
 	}
 }
