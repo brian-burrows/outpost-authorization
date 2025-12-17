@@ -11,13 +11,13 @@ type User struct {
 	Email string
 }
 
-type Role struct{}
-type Permission struct{}
-
-var RegisteredEmails = make(map[string]bool)
+var RegisteredUsers = make(map[string]bool)
 
 func CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
-	if RegisteredEmails[email] {
+	if RegisteredUsers[email] {
+		return &User{}, errors.New("duplicate email address found")
+	}
+	if RegisteredUsers[providerKey] {
 		return &User{}, errors.New("duplicate email address found")
 	}
 	b := make([]byte, 8)
@@ -27,6 +27,7 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 		ID:    id,
 		Email: email,
 	}
-	RegisteredEmails[email] = true
+	RegisteredUsers[email] = true
+	RegisteredUsers[providerKey] = true
 	return
 }

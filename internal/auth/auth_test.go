@@ -6,7 +6,7 @@ import (
 )
 
 func setup() {
-	RegisteredEmails = make(map[string]bool)
+	RegisteredUsers = make(map[string]bool)
 }
 
 func TestCreateUser(t *testing.T) {
@@ -32,7 +32,8 @@ func TestCreateUserMakesUniqueIDs(t *testing.T) {
 	userIDs := make(map[string]bool)
 	for i := 0; i < 100; i++ {
 		uniqueEmail := fmt.Sprintf("%s-%d@example.com", email, i)
-		user, err := CreateUser(uniqueEmail, providerType, providerKey, credential)
+		uniqueKey := fmt.Sprintf("%s-%d", providerKey, i)
+		user, err := CreateUser(uniqueEmail, providerType, uniqueKey, credential)
 		if err != nil {
 			t.Fatalf("Error creating user: %v", err)
 		}
@@ -55,4 +56,14 @@ func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
 		t.Errorf("Expected duplicate email registration to raise an error")
 	}
 }
-func TestCreateUserForbidsDuplicateProviderKeys(t *testing.T) {}
+func TestCreateUserForbidsDuplicateProviderKeys(t *testing.T) {
+	setup()
+	providerType := "email"
+	credential := "password123"
+	duplicateKey := "key-1"
+	_, err := CreateUser("email-1@email.com", providerType, duplicateKey, credential)
+	_, err = CreateUser("email-2@email.com", providerType, duplicateKey, credential)
+	if err == nil {
+		t.Errorf("Expected duplicate email registration to raise an error")
+	}
+}
