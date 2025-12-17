@@ -1,0 +1,52 @@
+# -----------------------------------------------
+# Go Project Defaults
+# -----------------------------------------------
+
+# Executable/Binary files
+# Ignore all built binaries in the root and in the cmd/ directories
+*.exe
+*.o
+*.so
+*.a
+# Ignore the built executable inside the cmd directory (e.g., cmd/auth/main)
+/cmd/auth/main
+
+# Test binaries and cache
+*.test
+/coverage.out
+# Go module cache folder
+/pkg/mod
+# Go build cache folder
+/go.build.cache/
+.cache/
+
+# -----------------------------------------------
+# Dependency Management (YOUR KEY IGNORE)
+# -----------------------------------------------
+
+# The 'vendor' directory is typically a dependency that should NOT be committed 
+# when using Go Modules (which relies on go.mod and go.sum).
+# The 'go mod vendor' command can regenerate this directory if needed.
+/vendor/ 
+
+# -----------------------------------------------
+# Operating System & IDE Specific
+# -----------------------------------------------
+
+# macOS/OS X
+.DS_Store
+# Vim/Emacs swap files
+*~
+# VS Code files
+.vscode/
+
+# -----------------------------------------------
+# Configuration and Environment Secrets
+# -----------------------------------------------
+
+# Any file containing environment variables or secrets
+# You mentioned MONGO_URI and JWT_SECRET, these should NOT be committed.
+# Common names for local config files:
+.env
+.env.local
+/config/local.env
