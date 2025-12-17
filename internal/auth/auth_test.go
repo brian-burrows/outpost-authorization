@@ -7,7 +7,7 @@ import (
 )
 
 func setup() {
-	RegisteredProviders = make(map[string]bool)
+	RegisteredProviders = make(map[string]*User)
 }
 
 func TestCreateUser(t *testing.T) {
@@ -98,7 +98,7 @@ func TestCreateUserRequiresNonEmptyFields(t *testing.T) {
 
 func TestCreateUserIsAtomic(t *testing.T) {
 	setup()
-	_, _ = CreateUser("original@ex.com", "email", "key-conflict", "pass")
+	CreateUser("original@ex.com", "email", "key-conflict", "pass")
 	newEmail := "new-potential-user@ex.com"
 	_, err := CreateUser(newEmail, "email", "key-conflict", "pass")
 	if err == nil {
@@ -108,4 +108,21 @@ func TestCreateUserIsAtomic(t *testing.T) {
 	if err != nil {
 		t.Errorf("Atomicity failure: %v. The email was 'locked' even though registration failed.", err)
 	}
+}
+
+func TestGetUserRetrievesCreatedUser(t *testing.T) {
+	setup()
+	providerType := "email"
+	emails := []string{"1@ex.com", "2@email.com", "3@email.com"}
+	for _, userEmail := range emails {
+		CreateUser(userEmail, providerType, userEmail, "auth-credential")
+		user, err := GetUser(providerType, userEmail, "auth-credential")
+		if err != nil {
+			t.Fatalf("failed to fetch user that was just created")
+		}
+		if user.Email != userEmail {
+			t.Fatalf("fetched the wrong user %s when expecting %s", user.Email, userEmail)
+		}
+	}
+
 }

@@ -11,7 +11,7 @@ type User struct {
 	Email string
 }
 
-var RegisteredProviders = make(map[string]bool)
+var RegisteredProviders = make(map[string]*User)
 
 type ErrDuplicateField struct {
 	Field string
@@ -64,7 +64,8 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 		{"providerInfo", providerKeyPath},
 	}
 	for _, field := range checkFields {
-		if RegisteredProviders[field.Value] {
+		_, ok := RegisteredProviders[field.Value]
+		if ok {
 			return nil, &ErrDuplicateField{Field: field.Label, Value: field.Value}
 		}
 	}
@@ -78,7 +79,16 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 	}
 	// register the user
 	for _, field := range checkFields {
-		RegisteredProviders[field.Value] = true
+		RegisteredProviders[field.Value] = user
+	}
+	return
+}
+
+func GetUser(providerType, providerKey, credential string) (user *User, err error) {
+	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
+	user, ok := RegisteredProviders[providerKeyPath]
+	if !ok {
+		err = fmt.Errorf("cannot find user associated with %s for provider type %s", providerKey, providerType)
 	}
 	return
 }
