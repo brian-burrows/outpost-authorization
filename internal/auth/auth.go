@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -14,6 +15,12 @@ type User struct {
 
 var CredentialsRegistry = make(map[string]*User)
 
+var (
+	ErrInvalidEmail    = errors.New("invalid email format")
+	ErrInvalidProvider = errors.New("invalid provider key")
+	randReader         = rand.Read
+)
+
 type ErrDuplicateField struct {
 	Field string
 	Value string
@@ -25,34 +32,26 @@ func (e *ErrDuplicateField) Error() string {
 
 func makeRandomIdentifier() (id string, err error) {
 	b := make([]byte, 8)
-	_, err = rand.Read(b)
+	_, err = randReader(b)
+	if err != nil {
+		return "", err
+	}
 	id = fmt.Sprintf("%x", b)
 	return
 }
 
-func validateProviderKeyFormat(providerKey string) (err error) {
-	if len(providerKey) < 1 {
-		err = fmt.Errorf("duplicate provider key: %s", providerKey)
-	}
-	return
-}
-func validateEmailFormat(email string) (err error) {
-	minChars := 6
-	if len(email) < minChars {
-		err = fmt.Errorf("email must have more than %d characters", minChars)
-	} else if !strings.Contains(email, "@") {
-		err = fmt.Errorf("email must have '@' symbol, received %s", email)
-	}
-	return
-}
-
 func CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
-	if err := validateEmailFormat(email); err != nil {
-		return nil, fmt.Errorf("creating user: %w", err)
+	validations := []struct {
+		isValid bool
+		err     error
+	}{
+		{len(email) >= 6 && strings.Contains(email, "@"), ErrInvalidEmail},
+		{len(providerKey) >= 1, ErrInvalidProvider},
 	}
-
-	if err := validateProviderKeyFormat(providerKey); err != nil {
-		return nil, fmt.Errorf("creating user: %w", err)
+	for _, v := range validations {
+		if !v.isValid {
+			return nil, fmt.Errorf("creating user: %w", v.err)
+		}
 	}
 	registrationKey := fmt.Sprintf("reg:%s", email)
 	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)

@@ -174,3 +174,42 @@ func TestGetUserHandlesMissingUser(t *testing.T) {
 		t.Errorf("Missing email should return an error upon fetch")
 	}
 }
+
+func TestCreateUserHandlesRandomFailure(t *testing.T) {
+	setup()
+	oldReader := randReader
+	defer func() { randReader = oldReader }()
+	randReader = func(b []byte) (int, error) {
+		return 0, errors.New("randomness failed")
+	}
+	_, err := CreateUser("test@example.com", "email", "key", "pass")
+	if err == nil {
+		t.Error("Expected error when random identifier generation fails, but got nil")
+	}
+}
+
+func TestErrDuplicateFieldFormatting(t *testing.T) {
+	// 1. Create the error manually
+	customErr := &ErrDuplicateField{
+		Field: "email",
+		Value: "bob@example.com",
+	}
+
+	// 2. Test the Error() string output (exercises the code coverage)
+	expected := "duplicate email found: bob@example.com"
+	if customErr.Error() != expected {
+		t.Errorf("Expected string '%s', got '%s'", expected, customErr.Error())
+	}
+
+	// 3. Test how it behaves when wrapped (simulating real-world usage)
+	wrappedErr := fmt.Errorf("context: %w", customErr)
+
+	var target *ErrDuplicateField
+	if !errors.As(wrappedErr, &target) {
+		t.Fatal("Failed to recover ErrDuplicateField using errors.As")
+	}
+
+	if target.Field != "email" {
+		t.Errorf("Expected field 'email', got '%s'", target.Field)
+	}
+}
