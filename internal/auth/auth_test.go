@@ -7,7 +7,7 @@ import (
 )
 
 func setup() {
-	RegisteredProviders = make(map[string]bool)
+	CredentialsRegistry = make(map[string]*User)
 }
 
 func TestCreateUser(t *testing.T) {
@@ -55,7 +55,7 @@ func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
 	if !errors.As(err, &dupErr) {
 		t.Fatalf("Expected ErrDuplicateField, got %T (%v)", err, err)
 	}
-	if dupErr.Field != "registrationKey" {
+	if dupErr.Field != "email" {
 		t.Errorf("Expected error on field 'email', got %s", dupErr.Field)
 	}
 }
@@ -71,13 +71,15 @@ func TestCreateUserForbidsDuplicateProviderKeys(t *testing.T) {
 	}
 }
 
-func TestCreateUserAllowsMultipleProviderTypesPerEmail(t *testing.T) {
+func TestCreateUserForbidsAddingNewProviderTypes(t *testing.T) {
+	setup()
 	email := "email-1@email.com"
+	CreateUser("email-1@email.com", "firstProviderType", "randomkey", "credential")
 	providers := map[string]string{"A": "1", "B": "2", "C": "3"}
 	for pType, pKey := range providers {
-		_, err := CreateUser(email, pType, pKey, "password123")
-		if err != nil {
-			t.Errorf("Failed to register %s: %v", pType, err)
+		_, err := CreateUser(email, pType, pKey, "credential")
+		if err == nil {
+			t.Errorf("adding a new provider type using create user function should fail %s: %v", pType, err)
 		}
 	}
 }
@@ -96,7 +98,7 @@ func TestCreateUserRequiresNonEmptyFields(t *testing.T) {
 
 func TestCreateUserIsAtomic(t *testing.T) {
 	setup()
-	_, _ = CreateUser("original@ex.com", "email", "key-conflict", "pass")
+	CreateUser("original@ex.com", "email", "key-conflict", "pass")
 	newEmail := "new-potential-user@ex.com"
 	_, err := CreateUser(newEmail, "email", "key-conflict", "pass")
 	if err == nil {
@@ -105,5 +107,109 @@ func TestCreateUserIsAtomic(t *testing.T) {
 	_, err = CreateUser(newEmail, "email", "valid-key", "pass")
 	if err != nil {
 		t.Errorf("Atomicity failure: %v. The email was 'locked' even though registration failed.", err)
+	}
+}
+
+func TestGetUserRetrievesCreatedUser(t *testing.T) {
+	setup()
+	providerType := "email"
+	emails := []string{"1@ex.com", "2@email.com", "3@email.com"}
+	for _, userEmail := range emails {
+		CreateUser(userEmail, providerType, userEmail, "auth-credential")
+		user, err := GetUser(userEmail)
+		if err != nil {
+			t.Fatalf("failed to fetch user that was just created")
+		}
+		if user.Email != userEmail {
+			t.Fatalf("fetched the wrong user %s when expecting %s", user.Email, userEmail)
+		}
+	}
+}
+
+func TestLoginReturnsCorrect(t *testing.T) {
+	setup()
+	email := "me@email.com"
+	providerType := "google"
+	providerKey := "my-provider-key"
+	credential := "my-credentials"
+	CreateUser(email, providerType, providerKey, credential)
+	user, err := Login(providerType, providerKey, credential)
+	if err != nil {
+		t.Errorf("Unable to locate user using %s, %s, %s", providerType, providerKey, credential)
+	}
+	if user.Email != email {
+		t.Errorf("fetched %s when expecting %s", email, user.Email)
+	}
+	user, err = Login(providerType, providerKey, "invalid-credentials")
+	if err == nil {
+		t.Errorf("fetched user %s, but expected failure due to invalid credentials", user.Email)
+	}
+}
+
+func TestLoginHandlesMissingUser(t *testing.T) {
+	setup()
+	providerType := "google"
+	providerKey := "my-provider-key"
+	credential := "my-credentials"
+	_, err := Login(providerType, providerKey, credential)
+	if err == nil {
+		t.Errorf("Should have been unable to locate non-existant user %s, %s, %s", providerType, providerKey, credential)
+	}
+}
+
+func TestCreateUserHandlesInvalidEmailFormat(t *testing.T) {
+	setup()
+	email := "invalid-email"
+	_, err := CreateUser(email, "email", "key-conflict", "pass")
+	if err == nil {
+		t.Errorf("Email address should contain an @, creation with email='%s' should have failed", email)
+	}
+}
+
+func TestGetUserHandlesMissingUser(t *testing.T) {
+	setup()
+	email := "missing-user@gmail.com"
+	_, err := GetUser(email)
+	if err == nil {
+		t.Errorf("Missing email should return an error upon fetch")
+	}
+}
+
+func TestCreateUserHandlesRandomFailure(t *testing.T) {
+	setup()
+	oldReader := randReader
+	defer func() { randReader = oldReader }()
+	randReader = func(b []byte) (int, error) {
+		return 0, errors.New("randomness failed")
+	}
+	_, err := CreateUser("test@example.com", "email", "key", "pass")
+	if err == nil {
+		t.Error("Expected error when random identifier generation fails, but got nil")
+	}
+}
+
+func TestErrDuplicateFieldFormatting(t *testing.T) {
+	// 1. Create the error manually
+	customErr := &ErrDuplicateField{
+		Field: "email",
+		Value: "bob@example.com",
+	}
+
+	// 2. Test the Error() string output (exercises the code coverage)
+	expected := "duplicate email found: bob@example.com"
+	if customErr.Error() != expected {
+		t.Errorf("Expected string '%s', got '%s'", expected, customErr.Error())
+	}
+
+	// 3. Test how it behaves when wrapped (simulating real-world usage)
+	wrappedErr := fmt.Errorf("context: %w", customErr)
+
+	var target *ErrDuplicateField
+	if !errors.As(wrappedErr, &target) {
+		t.Fatal("Failed to recover ErrDuplicateField using errors.As")
+	}
+
+	if target.Field != "email" {
+		t.Errorf("Expected field 'email', got '%s'", target.Field)
 	}
 }

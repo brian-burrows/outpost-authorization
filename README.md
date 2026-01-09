@@ -43,3 +43,47 @@ go build -o ./bin/outpost-auth ./cmd/auth
 # Run the compiled binary
 ./bin/outpost-auth
 ```
+
+## Testing, Test Coverage, and Complexity Scores
+
+### Viewing test coverage
+
+```bash
+go test -coverprofile=cp.out ./...
+go tool cover -html=cp.out
+```
+
+### Viewing code complexity
+
+This script calculates the ABC score (assignments, branches, conditionals) of a file.
+
+```bath
+go build -o complexity ./cmd/complexity
+./complexity ./<filepath>.go
+```
+
+For a single function, the scores roughly indicate:
+
+- **Simple code: (ideal)** 0 - 5
+- **Fairly Simple: (OK)** 6 - 10
+- **Moderatily Complex** 11 - 15
+- **High complexity** 16 - 20
+- **Very high complexity** > 20
+
+Moderately complex code should be reviewed.
+High complexity code is a candidate for a refactor.
+Very high complexity code should be decomposed.
+
+Note: This looks at function-level complexity.
+It cannot distinguish between
+
+- One giant function (high ABC score)
+- 20 trivially tiny functions (all low ABC score)
+- 5 well-designed, cohesive fnuctions (all moderately low ABC scores)
+
+So, it can be useful to aggregate these.
+
+- Total ABC per package
+- Avg ABC per function
+- Max ABC
+- Function count
