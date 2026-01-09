@@ -7,11 +7,12 @@ import (
 )
 
 type User struct {
-	ID    string
-	Email string
+	ID          string
+	Email       string
+	Credentials map[string]string
 }
 
-var RegisteredProviders = make(map[string]*User)
+var CredentialsRegistry = make(map[string]*User)
 
 type ErrDuplicateField struct {
 	Field string
@@ -29,13 +30,13 @@ func makeRandomIdentifier() (id string, err error) {
 	return
 }
 
-func validateProviderKey(providerKey string) (err error) {
+func validateProviderKeyFormat(providerKey string) (err error) {
 	if len(providerKey) < 1 {
 		err = fmt.Errorf("duplicate provider key: %s", providerKey)
 	}
 	return
 }
-func validateEmail(email string) (err error) {
+func validateEmailFormat(email string) (err error) {
 	minChars := 6
 	if len(email) < minChars {
 		err = fmt.Errorf("email must have more than %d characters", minChars)
@@ -46,11 +47,11 @@ func validateEmail(email string) (err error) {
 }
 
 func CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
-	if err := validateEmail(email); err != nil {
+	if err := validateEmailFormat(email); err != nil {
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 
-	if err := validateProviderKey(providerKey); err != nil {
+	if err := validateProviderKeyFormat(providerKey); err != nil {
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 	registrationKey := fmt.Sprintf("reg:%s", email)
@@ -64,7 +65,7 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 		{"providerInfo", providerKeyPath},
 	}
 	for _, field := range checkFields {
-		_, ok := RegisteredProviders[field.Value]
+		_, ok := CredentialsRegistry[field.Value]
 		if ok {
 			return nil, &ErrDuplicateField{Field: field.Label, Value: field.Value}
 		}
@@ -74,21 +75,34 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 		return nil, err
 	}
 	user = &User{
-		ID:    id,
-		Email: email,
+		ID:          id,
+		Email:       email,
+		Credentials: map[string]string{providerKeyPath: credential},
 	}
 	// register the user
 	for _, field := range checkFields {
-		RegisteredProviders[field.Value] = user
+		CredentialsRegistry[field.Value] = user
 	}
 	return
 }
 
-func GetUser(providerType, providerKey, credential string) (user *User, err error) {
-	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
-	user, ok := RegisteredProviders[providerKeyPath]
+func GetUser(email string) (*User, error) {
+	registrationKey := fmt.Sprintf("reg:%s", email)
+	user, ok := CredentialsRegistry[registrationKey]
 	if !ok {
-		err = fmt.Errorf("cannot find user associated with %s for provider type %s", providerKey, providerType)
+		return nil, fmt.Errorf("unable to fetch target user using email %s", email)
 	}
-	return
+	return user, nil
+}
+
+func Login(providerType, providerKey, credential string) (*User, error) {
+	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
+	user, ok := CredentialsRegistry[providerKeyPath]
+	if user.Credentials[providerKeyPath] != credential {
+		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
+	}
+	if !ok {
+		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
+	}
+	return user, nil
 }

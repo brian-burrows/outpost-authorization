@@ -7,7 +7,7 @@ import (
 )
 
 func setup() {
-	RegisteredProviders = make(map[string]*User)
+	CredentialsRegistry = make(map[string]*User)
 }
 
 func TestCreateUser(t *testing.T) {
@@ -116,7 +116,7 @@ func TestGetUserRetrievesCreatedUser(t *testing.T) {
 	emails := []string{"1@ex.com", "2@email.com", "3@email.com"}
 	for _, userEmail := range emails {
 		CreateUser(userEmail, providerType, userEmail, "auth-credential")
-		user, err := GetUser(providerType, userEmail, "auth-credential")
+		user, err := GetUser(userEmail)
 		if err != nil {
 			t.Fatalf("failed to fetch user that was just created")
 		}
@@ -124,5 +124,24 @@ func TestGetUserRetrievesCreatedUser(t *testing.T) {
 			t.Fatalf("fetched the wrong user %s when expecting %s", user.Email, userEmail)
 		}
 	}
+}
 
+func TestLoginReturnsCorrect(t *testing.T) {
+	setup()
+	email := "me@email.com"
+	providerType := "google"
+	providerKey := "my-provider-key"
+	credential := "my-credentials"
+	CreateUser(email, providerType, providerKey, credential)
+	user, err := Login(providerType, providerKey, credential)
+	if err != nil {
+		t.Errorf("Unable to locate user using %s, %s, %s", providerType, providerKey, credential)
+	}
+	if user.Email != email {
+		t.Errorf("fetched %s when expecting %s", email, user.Email)
+	}
+	user, err = Login(providerType, providerKey, "invalid-credentials")
+	if err == nil {
+		t.Errorf("fetched user %s, but expected failure due to invalid credentials", user.Email)
+	}
 }
