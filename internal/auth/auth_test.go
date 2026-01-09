@@ -165,3 +165,12 @@ func TestCreateUserHandlesInvalidEmailFormat(t *testing.T) {
 		t.Errorf("Email address should contain an @, creation with email='%s' should have failed", email)
 	}
 }
+
+func TestGetUserHandlesMissingUser(t *testing.T) {
+	setup()
+	email := "missing-user@gmail.com"
+	_, err := GetUser(email)
+	if err == nil {
+		t.Errorf("Missing email should return an error upon fetch")
+	}
+}
