@@ -50,3 +50,6 @@
 .env
 .env.local
 /config/local.env
+
+complexity
+cp.out
