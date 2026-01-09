@@ -98,10 +98,10 @@ func GetUser(email string) (*User, error) {
 func Login(providerType, providerKey, credential string) (*User, error) {
 	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
 	user, ok := CredentialsRegistry[providerKeyPath]
-	if user.Credentials[providerKeyPath] != credential {
+	if !ok {
 		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
 	}
-	if !ok {
+	if user.Credentials[providerKeyPath] != credential {
 		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
 	}
 	return user, nil

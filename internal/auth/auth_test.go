@@ -145,3 +145,23 @@ func TestLoginReturnsCorrect(t *testing.T) {
 		t.Errorf("fetched user %s, but expected failure due to invalid credentials", user.Email)
 	}
 }
+
+func TestLoginHandlesMissingUser(t *testing.T) {
+	setup()
+	providerType := "google"
+	providerKey := "my-provider-key"
+	credential := "my-credentials"
+	_, err := Login(providerType, providerKey, credential)
+	if err == nil {
+		t.Errorf("Should have been unable to locate non-existant user %s, %s, %s", providerType, providerKey, credential)
+	}
+}
+
+func TestCreateUserHandlesInvalidEmailFormat(t *testing.T) {
+	setup()
+	email := "invalid-email"
+	_, err := CreateUser(email, "email", "key-conflict", "pass")
+	if err == nil {
+		t.Errorf("Email address should contain an @, creation with email='%s' should have failed", email)
+	}
+}
