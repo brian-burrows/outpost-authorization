@@ -23,13 +23,11 @@ func TestCreateUserMakesUniqueIDs(t *testing.T) {
 	auth := NewAuthorizationService()
 	email := "user@example.com"
 	providerType := "email"
-	providerKey := "hello"
 	credential := "password123"
 	userIDs := make(map[string]bool)
 	for i := 0; i < 100; i++ {
 		uniqueEmail := fmt.Sprintf("%s-%d@example.com", email, i)
-		uniqueKey := fmt.Sprintf("%s-%d", providerKey, i)
-		user, err := auth.CreateUser(uniqueEmail, providerType, uniqueKey, credential)
+		user, err := auth.CreateUser(uniqueEmail, providerType, uniqueEmail, credential)
 		if err != nil {
 			t.Fatalf("Error creating user: %v", err)
 		}
@@ -42,10 +40,10 @@ func TestCreateUserMakesUniqueIDs(t *testing.T) {
 
 func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
 	auth := NewAuthorizationService()
-	email := "dup@example.com"
+	email := "duplicate@example.com"
 
-	auth.CreateUser(email, "email", "key1", "pass")
-	_, err := auth.CreateUser(email, "email", "key2", "pass")
+	auth.CreateUser(email, "email", email, "pass")
+	_, err := auth.CreateUser(email, "gmail", "fake-key", "pass")
 
 	var dupErr *ErrDuplicateField
 	if !errors.As(err, &dupErr) {
@@ -94,13 +92,12 @@ func TestCreateUserRequiresNonEmptyFields(t *testing.T) {
 
 func TestCreateUserIsAtomic(t *testing.T) {
 	auth := NewAuthorizationService()
-	auth.CreateUser("original@ex.com", "email", "key-conflict", "pass")
-	newEmail := "new-potential-user@ex.com"
-	_, err := auth.CreateUser(newEmail, "email", "key-conflict", "pass")
+	auth.CreateUser("original@ex.com", "gmail", "key-conflict", "pass")
+	_, err := auth.CreateUser("new-potential-user@ex.com", "gmail", "key-conflict", "pass")
 	if err == nil {
 		t.Fatal("Expected error due to duplicate provider key, but got nil")
 	}
-	_, err = auth.CreateUser(newEmail, "email", "valid-key", "pass")
+	_, err = auth.CreateUser("new-potential-user@ex.com", "gmail", "valid-key", "pass")
 	if err != nil {
 		t.Errorf("Atomicity failure: %v. The email was 'locked' even though registration failed.", err)
 	}
@@ -207,5 +204,28 @@ func TestErrDuplicateFieldFormatting(t *testing.T) {
 
 	if target.Field != "email" {
 		t.Errorf("Expected field 'email', got '%s'", target.Field)
+	}
+}
+
+func TestLinkMultipleProvidersToSameUser(t *testing.T) {
+	auth := NewAuthorizationService()
+	oldProviderType := "email"
+	oldProviderKey := "user@example.com"
+	oldProviderCredentials := "password123"
+	newProviderType := "google"
+	newProviderKey := "my-google-key"
+	newProviderCredentials := "my-google-token"
+	user, _ := auth.CreateUser(oldProviderKey, oldProviderType, oldProviderKey, oldProviderCredentials)
+	err := auth.AddIdentity(user.ID, newProviderType, newProviderKey, newProviderCredentials)
+	if err != nil {
+		t.Errorf("Expected to successfully add a new identity to existing user")
+	}
+	user2, err := auth.GetUserByIdentity(newProviderType, newProviderKey)
+	if err != nil {
+		t.Fatalf(err.Error())
+	} else if user2 == nil {
+		t.Fatal("user2 is nil; identity was likely not saved to the registry")
+	} else if user2.ID != user.ID {
+		t.Errorf("Expected to fetch the same user based on the new identity")
 	}
 }

@@ -47,63 +47,115 @@ func makeRandomIdentifier() (id string, err error) {
 }
 
 func (auth *AuthorizationService) CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
-	validations := []struct {
-		isValid bool
-		err     error
-	}{
-		{len(email) >= 6 && strings.Contains(email, "@"), ErrInvalidEmail},
-		{len(providerKey) >= 1, ErrInvalidProvider},
-	}
-	for _, v := range validations {
-		if !v.isValid {
-			return nil, fmt.Errorf("creating user: %w", v.err)
-		}
-	}
-	registrationKey := fmt.Sprintf("reg:%s", email)
-	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
-	// Check if a registered user exists
-	checkFields := []struct {
-		Label string
-		Value string
-	}{
-		{"email", registrationKey},
-		{"providerInfo", providerKeyPath},
-	}
-	for _, field := range checkFields {
-		_, ok := auth.registry[field.Value]
-		if ok {
-			return nil, &ErrDuplicateField{Field: field.Label, Value: field.Value}
-		}
-	}
-	id, err := makeRandomIdentifier()
+	randomId, err := makeRandomIdentifier()
 	if err != nil {
 		return nil, err
 	}
+	providers := []struct {
+		pType string
+		pKey  string
+	}{
+		{providerType, providerKey},
+		{"email", email},
+		{"UserId", randomId},
+	}
+	var keys []string
+	for _, p := range providers {
+		key, err := auth.identityKey(p.pType, p.pKey)
+		if err != nil {
+			return nil, err
+		}
+		_, ok := auth.registry[key]
+		if ok {
+			return nil, &ErrDuplicateField{Field: p.pType, Value: p.pKey}
+		}
+		keys = append(keys, key)
+	}
 	user = &User{
-		ID:          id,
+		ID:          randomId,
 		Email:       email,
-		Credentials: map[string]string{providerKeyPath: credential},
+		Credentials: map[string]string{},
 	}
 	// register the user
-	for _, field := range checkFields {
-		auth.registry[field.Value] = user
+	for _, key := range keys {
+		user.Credentials[key] = credential
+		auth.registry[key] = user
 	}
 	return
 }
+func (auth *AuthorizationService) identityKey(pType, pKey string) (string, error) {
+	if pType == "email" && len(pKey) >= 6 && strings.Contains(pKey, "@") {
+		return fmt.Sprintf("reg:%s", pKey), nil
+	} else if pType == "email" {
+		// fmt.Printf("Failing on email %s %s", pType, pKey)
+		return "", ErrInvalidEmail
+	} else if len(pKey) < 1 {
+		return "", ErrInvalidProvider
+	}
+	return fmt.Sprintf("providerInfo:%s:%s", pType, pKey), nil
+}
 
-func (auth *AuthorizationService) GetUser(email string) (*User, error) {
-	registrationKey := fmt.Sprintf("reg:%s", email)
-	if user, ok := auth.registry[registrationKey]; ok {
+func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, error) {
+	key, err := auth.identityKey(pType, pKey)
+	if err != nil {
+		return nil, err
+	}
+	if user, ok := auth.registry[key]; ok {
 		return user, nil
 	}
-	return nil, fmt.Errorf("unable to fetch target user using email %s", email)
+	return nil, fmt.Errorf("Failed to find user by default")
+}
+
+func (auth *AuthorizationService) GetUser(email string) (*User, error) {
+	user, err := auth.GetUserByIdentity("email", email)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func (auth *AuthorizationService) Login(providerType, providerKey, credential string) (*User, error) {
-	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
+	providerKeyPath, err := auth.identityKey(providerType, providerKey)
+	if err != nil {
+		return nil, err
+	}
 	user, ok := auth.registry[providerKeyPath]
 	if ok && user.Credentials[providerKeyPath] == credential {
 		return user, nil
 	}
 	return nil, fmt.Errorf("unable to authenticate, invalid credentials")
+}
+
+func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
+	providerKeyPath, err := auth.identityKey("UserId", userId)
+	if err != nil {
+		return nil, err
+	}
+	user, ok := auth.registry[providerKeyPath]
+	if ok {
+		return user, nil
+	}
+	return nil, fmt.Errorf("User ID does not exist")
+}
+func (auth *AuthorizationService) AddIdentity(userId, providerType, providerKey, credential string) error {
+	user, err := auth.findUserById(userId)
+	fmt.Printf("Step 1 %#v", user)
+	if err != nil { // user not found
+		return ErrInvalidProvider
+	}
+	fmt.Printf("Step 2")
+	providerKeyPath, err := auth.identityKey(providerType, providerKey)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Step 3")
+	existingUser, ok := auth.registry[providerKeyPath]
+	if ok && existingUser != nil && existingUser.ID != user.ID { // this identity already exists, and the current user doesn't own it
+		return nil
+	}
+	fmt.Printf("Step 4")
+	fmt.Printf("Generated %s %s and storing", providerKeyPath, credential)
+	user.Credentials[providerKeyPath] = credential
+	auth.registry[providerKeyPath] = user
+	return nil
 }
