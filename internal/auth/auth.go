@@ -13,13 +13,19 @@ type User struct {
 	Credentials map[string]string
 }
 
-var CredentialsRegistry = make(map[string]*User)
-
 var (
 	ErrInvalidEmail    = errors.New("invalid email format")
 	ErrInvalidProvider = errors.New("invalid provider key")
 	randReader         = rand.Read
 )
+
+type AuthorizationService struct {
+	registry map[string]*User
+}
+
+func NewAuthorizationService() *AuthorizationService {
+	return &AuthorizationService{registry: make(map[string]*User)}
+}
 
 type ErrDuplicateField struct {
 	Field string
@@ -40,7 +46,7 @@ func makeRandomIdentifier() (id string, err error) {
 	return
 }
 
-func CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
+func (auth *AuthorizationService) CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
 	validations := []struct {
 		isValid bool
 		err     error
@@ -64,7 +70,7 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 		{"providerInfo", providerKeyPath},
 	}
 	for _, field := range checkFields {
-		_, ok := CredentialsRegistry[field.Value]
+		_, ok := auth.registry[field.Value]
 		if ok {
 			return nil, &ErrDuplicateField{Field: field.Label, Value: field.Value}
 		}
@@ -80,28 +86,24 @@ func CreateUser(email string, providerType string, providerKey string, credentia
 	}
 	// register the user
 	for _, field := range checkFields {
-		CredentialsRegistry[field.Value] = user
+		auth.registry[field.Value] = user
 	}
 	return
 }
 
-func GetUser(email string) (*User, error) {
+func (auth *AuthorizationService) GetUser(email string) (*User, error) {
 	registrationKey := fmt.Sprintf("reg:%s", email)
-	user, ok := CredentialsRegistry[registrationKey]
-	if !ok {
-		return nil, fmt.Errorf("unable to fetch target user using email %s", email)
+	if user, ok := auth.registry[registrationKey]; ok {
+		return user, nil
 	}
-	return user, nil
+	return nil, fmt.Errorf("unable to fetch target user using email %s", email)
 }
 
-func Login(providerType, providerKey, credential string) (*User, error) {
+func (auth *AuthorizationService) Login(providerType, providerKey, credential string) (*User, error) {
 	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
-	user, ok := CredentialsRegistry[providerKeyPath]
-	if !ok {
-		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
+	user, ok := auth.registry[providerKeyPath]
+	if ok && user.Credentials[providerKeyPath] == credential {
+		return user, nil
 	}
-	if user.Credentials[providerKeyPath] != credential {
-		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
-	}
-	return user, nil
+	return nil, fmt.Errorf("unable to authenticate, invalid credentials")
 }
