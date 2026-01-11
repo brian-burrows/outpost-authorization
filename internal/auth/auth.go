@@ -7,6 +7,25 @@ import (
 	"strings"
 )
 
+type ErrDuplicateField struct {
+	Field string
+	Value string
+}
+
+func (e *ErrDuplicateField) Error() string {
+	return fmt.Sprintf("duplicate %s found: %s", e.Field, e.Value)
+}
+
+func makeRandomIdentifier() (id string, err error) {
+	b := make([]byte, 8)
+	_, err = randReader(b)
+	if err != nil {
+		return "", err
+	}
+	id = fmt.Sprintf("%x", b)
+	return
+}
+
 type User struct {
 	ID          string
 	Email       string
@@ -25,25 +44,6 @@ type AuthorizationService struct {
 
 func NewAuthorizationService() *AuthorizationService {
 	return &AuthorizationService{registry: make(map[string]*User)}
-}
-
-type ErrDuplicateField struct {
-	Field string
-	Value string
-}
-
-func (e *ErrDuplicateField) Error() string {
-	return fmt.Sprintf("duplicate %s found: %s", e.Field, e.Value)
-}
-
-func makeRandomIdentifier() (id string, err error) {
-	b := make([]byte, 8)
-	_, err = randReader(b)
-	if err != nil {
-		return "", err
-	}
-	id = fmt.Sprintf("%x", b)
-	return
 }
 
 func (auth *AuthorizationService) CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
@@ -83,6 +83,7 @@ func (auth *AuthorizationService) CreateUser(email string, providerType string, 
 	}
 	return
 }
+
 func (auth *AuthorizationService) identityKey(pType, pKey string) (string, error) {
 	if pType == "email" && len(pKey) >= 6 && strings.Contains(pKey, "@") {
 		return fmt.Sprintf("reg:%s", pKey), nil
@@ -137,24 +138,20 @@ func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
 	}
 	return nil, fmt.Errorf("User ID does not exist")
 }
+
 func (auth *AuthorizationService) AddIdentity(userId, providerType, providerKey, credential string) error {
 	user, err := auth.findUserById(userId)
-	fmt.Printf("Step 1 %#v", user)
 	if err != nil { // user not found
 		return ErrInvalidProvider
 	}
-	fmt.Printf("Step 2")
 	providerKeyPath, err := auth.identityKey(providerType, providerKey)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Step 3")
 	existingUser, ok := auth.registry[providerKeyPath]
 	if ok && existingUser != nil && existingUser.ID != user.ID { // this identity already exists, and the current user doesn't own it
 		return nil
 	}
-	fmt.Printf("Step 4")
-	fmt.Printf("Generated %s %s and storing", providerKeyPath, credential)
 	user.Credentials[providerKeyPath] = credential
 	auth.registry[providerKeyPath] = user
 	return nil
