@@ -10,31 +10,34 @@ type Identity struct {
 	providerKey  string
 }
 
-func (*Identity) minKeyLength(pType string) int {
-	if pType == "email" {
+func (identity *Identity) minKeyLength() int {
+	if identity.providerType == "email" {
 		return 6
 	}
 	return 1
 }
 
-func (*Identity) requiredKeyCharacters(pType string) []string {
-	if pType == "email" {
+func (identity *Identity) requiredKeyCharacters() []string {
+	if identity.providerType == "email" {
 		return []string{"@"}
 	}
 	return []string{}
 }
 
-func (identity *Identity) IdentityKey(pType, pKey string) (string, error) {
-	length := len(pKey)
-	minLength := identity.minKeyLength(pType)
+func (identity *Identity) IdentityKey() (string, error) {
+	length := len(identity.providerKey)
+	minLength := identity.minKeyLength()
 	if length < minLength {
 		return "", ErrInvalidProvider
 	}
-	requiredElements := identity.requiredKeyCharacters(pType)
+	requiredElements := identity.requiredKeyCharacters()
 	for _, element := range requiredElements {
-		if !strings.Contains(pKey, element) {
+		if !strings.Contains(identity.providerKey, element) {
 			return "", ErrInvalidProvider
 		}
 	}
-	return fmt.Sprintf("providerInfo:%s:%s", pType, pKey), nil
+	return fmt.Sprintf("providerInfo:%s:%s", identity.providerType, identity.providerKey), nil
 }
+
+type EmailIdentity struct{}
+type PhoneNumberIdentity struct{}
