@@ -16,16 +16,6 @@ func (e *ErrDuplicateField) Error() string {
 	return fmt.Sprintf("duplicate %s found: %s", e.Field, e.Value)
 }
 
-func makeRandomIdentifier() (id string, err error) {
-	b := make([]byte, 8)
-	_, err = randReader(b)
-	if err != nil {
-		return "", err
-	}
-	id = fmt.Sprintf("%x", b)
-	return
-}
-
 type User struct {
 	ID          string
 	Email       string
@@ -39,15 +29,34 @@ var (
 )
 
 type AuthorizationService struct {
-	registry map[string]*User
+	registry    map[string]*User
+	UuidService UuidInterface
 }
 
-func NewAuthorizationService() *AuthorizationService {
-	return &AuthorizationService{registry: make(map[string]*User)}
+func NewAuthorizationService(opts ...func(*AuthorizationService)) *AuthorizationService {
+	service := &AuthorizationService{
+		registry:    make(map[string]*User),
+		UuidService: &RandomIdentifierGenerator{},
+	}
+	for _, o := range opts {
+		o(service)
+	}
+	return service
 }
 
-func (auth *AuthorizationService) CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
-	randomId, err := makeRandomIdentifier()
+func WithUuidService(generator UuidInterface) func(*AuthorizationService) {
+	return func(s *AuthorizationService) {
+		s.UuidService = generator
+	}
+}
+
+func (auth *AuthorizationService) CreateUser(
+	email string,
+	providerType string,
+	providerKey string,
+	credential string,
+) (user *User, err error) {
+	randomId, err := auth.UuidService.Generate()
 	if err != nil {
 		return nil, err
 	}
@@ -84,14 +93,31 @@ func (auth *AuthorizationService) CreateUser(email string, providerType string, 
 	return
 }
 
+func (auth *AuthorizationService) minKeyLength(pType string) int {
+	if pType == "email" {
+		return 6
+	}
+	return 1
+}
+
+func (auth *AuthorizationService) requiredKeyCharacters(pType string) []string {
+	if pType == "email" {
+		return []string{"@"}
+	}
+	return []string{}
+}
+
 func (auth *AuthorizationService) identityKey(pType, pKey string) (string, error) {
-	if pType == "email" && len(pKey) >= 6 && strings.Contains(pKey, "@") {
-		return fmt.Sprintf("reg:%s", pKey), nil
-	} else if pType == "email" {
-		// fmt.Printf("Failing on email %s %s", pType, pKey)
-		return "", ErrInvalidEmail
-	} else if len(pKey) < 1 {
+	length := len(pKey)
+	minLength := auth.minKeyLength(pType)
+	if length < minLength {
 		return "", ErrInvalidProvider
+	}
+	requiredElements := auth.requiredKeyCharacters(pType)
+	for _, element := range requiredElements {
+		if !strings.Contains(pKey, element) {
+			return "", ErrInvalidProvider
+		}
 	}
 	return fmt.Sprintf("providerInfo:%s:%s", pType, pKey), nil
 }
@@ -145,12 +171,13 @@ func (auth *AuthorizationService) AddIdentity(userId, providerType, providerKey,
 		return ErrInvalidProvider
 	}
 	providerKeyPath, err := auth.identityKey(providerType, providerKey)
+	fmt.Printf("The providerKeyPath is %s, %s, %s, %s\n", userId, providerKeyPath, providerType, providerKey)
 	if err != nil {
 		return err
 	}
 	existingUser, ok := auth.registry[providerKeyPath]
-	if ok && existingUser != nil && existingUser.ID != user.ID { // this identity already exists, and the current user doesn't own it
-		return nil
+	if ok && existingUser != nil && existingUser.ID != user.ID {
+		return ErrInvalidProvider
 	}
 	user.Credentials[providerKeyPath] = credential
 	auth.registry[providerKeyPath] = user

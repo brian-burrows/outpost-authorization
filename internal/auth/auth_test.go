@@ -41,10 +41,8 @@ func TestCreateUserMakesUniqueIDs(t *testing.T) {
 func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
 	auth := NewAuthorizationService()
 	email := "duplicate@example.com"
-
 	auth.CreateUser(email, "email", email, "pass")
 	_, err := auth.CreateUser(email, "gmail", "fake-key", "pass")
-
 	var dupErr *ErrDuplicateField
 	if !errors.As(err, &dupErr) {
 		t.Fatalf("Expected ErrDuplicateField, got %T (%v)", err, err)
@@ -168,19 +166,47 @@ func TestGetUserHandlesMissingUser(t *testing.T) {
 	}
 }
 
-func TestCreateUserHandlesRandomFailure(t *testing.T) {
-	auth := NewAuthorizationService()
-	oldReader := randReader
-	defer func() { randReader = oldReader }()
-	randReader = func(b []byte) (int, error) {
-		return 0, errors.New("randomness failed")
-	}
+type errorUuidService struct{}
+
+func (g *errorUuidService) Generate() (string, error) {
+	return "", errors.New("randomness failed")
+}
+
+func TestCreateUserHandlesFailureToCreateRandomIdentifier(t *testing.T) {
+	auth := NewAuthorizationService(WithUuidService(&errorUuidService{}))
 	_, err := auth.CreateUser("test@example.com", "email", "key", "pass")
 	if err == nil {
 		t.Error("Expected error when random identifier generation fails, but got nil")
 	}
 }
 
+func TestIdentityKeyErrorsOnEmptyKey(t *testing.T) {
+	auth := NewAuthorizationService()
+	_, err := auth.CreateUser("test@example.com", "google", "", "pass")
+	if err == nil {
+		t.Errorf("Expected ProviderKey validation to error on empty key")
+	}
+	_, err = auth.GetUserByIdentity("google", "")
+	if err == nil {
+		t.Errorf("Expected ProviderKey validation to error on empty key")
+	}
+	_, err = auth.Login("google", "", "credential")
+	if err == nil {
+		t.Errorf("Expected ProviderKey validation to error on empty key")
+	}
+}
+
+func TestFindingMissingUserFails(t *testing.T) {
+	auth := NewAuthorizationService()
+	_, err := auth.findUserById("missing-user")
+	if err == nil {
+		t.Errorf("Should not be able to locate missing user")
+	}
+	_, err = auth.findUserById("")
+	if err == nil {
+		t.Errorf("Should not be able to locate missing user")
+	}
+}
 func TestErrDuplicateFieldFormatting(t *testing.T) {
 	// 1. Create the error manually
 	customErr := &ErrDuplicateField{
@@ -227,5 +253,25 @@ func TestLinkMultipleProvidersToSameUser(t *testing.T) {
 		t.Fatal("user2 is nil; identity was likely not saved to the registry")
 	} else if user2.ID != user.ID {
 		t.Errorf("Expected to fetch the same user based on the new identity")
+	}
+}
+
+func TestAddIdentityFailsForInvalidInput(t *testing.T) {
+	auth := NewAuthorizationService()
+	err := auth.AddIdentity("fakeUserId", "gmail", "gmail-key", "gmail-token")
+	if err == nil {
+		t.Errorf("Expected to fail to lookup an invalid user when adding new Identity")
+	}
+	user, err := auth.CreateUser("me-email@gmail.com", "gmail", "gmail-key", "gmail-token")
+	fmt.Printf("Trying to add identity\n")
+	err = auth.AddIdentity(user.ID, "gmail", "", "gmail-token")
+	if err == nil {
+		t.Errorf("Expected to fail to add Identity with empty info")
+	}
+	user, err = auth.CreateUser("second-user@gmail.com", "gmail-2", "gmail-key-2", "gmail-token-2")
+	// Try to use other person's info
+	err = auth.AddIdentity(user.ID, "gmail", "gmail-key", "gmail-token")
+	if err == nil {
+		t.Errorf("Expected to fail when a second user tries to register another user's third-party keys")
 	}
 }
