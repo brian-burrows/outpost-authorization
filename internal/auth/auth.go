@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 type ErrDuplicateField struct {
@@ -50,11 +49,7 @@ func WithUuidService(generator UuidInterface) func(*AuthorizationService) {
 	}
 }
 
-func (auth *AuthorizationService) CreateUser(
-	email string,
-	providerType string,
-	providerKey string,
-	credential string,
+func (auth *AuthorizationService) CreateUser(email, providerType, providerKey, credential string,
 ) (user *User, err error) {
 	randomId, err := auth.UuidService.Generate()
 	if err != nil {
@@ -70,7 +65,7 @@ func (auth *AuthorizationService) CreateUser(
 	}
 	var keys []string
 	for _, p := range providers {
-		key, err := auth.identityKey(p.pType, p.pKey)
+		key, err := (&Identity{p.pType, p.pKey}).IdentityKey(p.pType, p.pKey)
 		if err != nil {
 			return nil, err
 		}
@@ -93,37 +88,16 @@ func (auth *AuthorizationService) CreateUser(
 	return
 }
 
-func (auth *AuthorizationService) minKeyLength(pType string) int {
-	if pType == "email" {
-		return 6
+func (auth *AuthorizationService) GetUser(email string) (*User, error) {
+	user, err := auth.GetUserByIdentity("email", email)
+	if err != nil {
+		return nil, err
 	}
-	return 1
-}
-
-func (auth *AuthorizationService) requiredKeyCharacters(pType string) []string {
-	if pType == "email" {
-		return []string{"@"}
-	}
-	return []string{}
-}
-
-func (auth *AuthorizationService) identityKey(pType, pKey string) (string, error) {
-	length := len(pKey)
-	minLength := auth.minKeyLength(pType)
-	if length < minLength {
-		return "", ErrInvalidProvider
-	}
-	requiredElements := auth.requiredKeyCharacters(pType)
-	for _, element := range requiredElements {
-		if !strings.Contains(pKey, element) {
-			return "", ErrInvalidProvider
-		}
-	}
-	return fmt.Sprintf("providerInfo:%s:%s", pType, pKey), nil
+	return user, nil
 }
 
 func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, error) {
-	key, err := auth.identityKey(pType, pKey)
+	key, err := (&Identity{pType, pKey}).IdentityKey(pType, pKey)
 	if err != nil {
 		return nil, err
 	}
@@ -133,16 +107,8 @@ func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, 
 	return nil, fmt.Errorf("Failed to find user by default")
 }
 
-func (auth *AuthorizationService) GetUser(email string) (*User, error) {
-	user, err := auth.GetUserByIdentity("email", email)
-	if err != nil {
-		return nil, err
-	}
-	return user, nil
-}
-
-func (auth *AuthorizationService) Login(providerType, providerKey, credential string) (*User, error) {
-	providerKeyPath, err := auth.identityKey(providerType, providerKey)
+func (auth *AuthorizationService) Login(pType, pKey, credential string) (*User, error) {
+	providerKeyPath, err := (&Identity{pType, pKey}).IdentityKey(pType, pKey)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +120,7 @@ func (auth *AuthorizationService) Login(providerType, providerKey, credential st
 }
 
 func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
-	providerKeyPath, err := auth.identityKey("UserId", userId)
+	providerKeyPath, err := (&Identity{"UserId", userId}).IdentityKey("UserId", userId)
 	if err != nil {
 		return nil, err
 	}
@@ -165,13 +131,12 @@ func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
 	return nil, fmt.Errorf("User ID does not exist")
 }
 
-func (auth *AuthorizationService) AddIdentity(userId, providerType, providerKey, credential string) error {
+func (auth *AuthorizationService) AddIdentity(userId, pType, pKey, credential string) error {
 	user, err := auth.findUserById(userId)
 	if err != nil { // user not found
 		return ErrInvalidProvider
 	}
-	providerKeyPath, err := auth.identityKey(providerType, providerKey)
-	fmt.Printf("The providerKeyPath is %s, %s, %s, %s\n", userId, providerKeyPath, providerType, providerKey)
+	providerKeyPath, err := (&Identity{pType, pKey}).IdentityKey(pType, pKey)
 	if err != nil {
 		return err
 	}
