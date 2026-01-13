@@ -65,7 +65,7 @@ func (auth *AuthorizationService) CreateUser(email, providerType, providerKey, c
 	}
 	var keys []string
 	for _, p := range providers {
-		key, err := (&Identity{p.pType, p.pKey}).IdentityKey()
+		key, err := NewIdentity(p.pType, p.pKey).IdentityKey()
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +97,7 @@ func (auth *AuthorizationService) GetUser(email string) (*User, error) {
 }
 
 func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, error) {
-	key, err := (&Identity{pType, pKey}).IdentityKey()
+	key, err := NewIdentity(pType, pKey).IdentityKey()
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +108,7 @@ func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, 
 }
 
 func (auth *AuthorizationService) Login(pType, pKey, credential string) (*User, error) {
-	providerKeyPath, err := (&Identity{pType, pKey}).IdentityKey()
+	providerKeyPath, err := NewIdentity(pType, pKey).IdentityKey()
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (auth *AuthorizationService) Login(pType, pKey, credential string) (*User, 
 }
 
 func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
-	providerKeyPath, err := (&Identity{"UserId", userId}).IdentityKey()
+	providerKeyPath, err := NewIdentity("UserId", userId).IdentityKey()
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (auth *AuthorizationService) AddIdentity(userId, pType, pKey, credential st
 	if err != nil { // user not found
 		return ErrInvalidProvider
 	}
-	providerKeyPath, err := (&Identity{pType, pKey}).IdentityKey()
+	providerKeyPath, err := NewIdentity(pType, pKey).IdentityKey()
 	if err != nil {
 		return err
 	}

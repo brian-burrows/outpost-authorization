@@ -5,39 +5,72 @@ import (
 	"strings"
 )
 
-type Identity struct {
+func NewIdentity(providerType, providerKey string) Identity {
+	base := BaseIdentity{
+		providerType: providerType,
+		providerKey:  providerKey,
+	}
+	var identity Identity
+	if providerType == "email" {
+		identity = EmailIdentity{BaseIdentity: base}
+	} else {
+		identity = DefaultIdentity{BaseIdentity: base}
+	}
+	return identity
+}
+
+type BaseIdentity struct {
 	providerType string
 	providerKey  string
 }
 
-func (identity *Identity) minKeyLength() int {
-	if identity.providerType == "email" {
-		return 6
-	}
-	return 1
+func (b BaseIdentity) ProviderType() string { return b.providerType }
+func (b BaseIdentity) ProviderKey() string  { return b.providerKey }
+
+type Identity interface {
+	IdentityKey() (string, error)
+	ProviderType() string
+	ProviderKey() string
 }
 
-func (identity *Identity) requiredKeyCharacters() []string {
-	if identity.providerType == "email" {
-		return []string{"@"}
-	}
-	return []string{}
+func RegistryKey(id Identity) string {
+	return fmt.Sprintf("providerInfo:%s:%s", id.ProviderType(), id.ProviderKey())
 }
 
-func (identity *Identity) IdentityKey() (string, error) {
+type DefaultIdentity struct {
+	BaseIdentity
+}
+
+func (identity DefaultIdentity) IdentityKey() (string, error) {
+	if len(identity.providerKey) < 1 {
+		return "", ErrInvalidProvider
+	}
+	return RegistryKey(identity), nil
+}
+
+type EmailIdentity struct {
+	BaseIdentity
+}
+
+func (identity EmailIdentity) IdentityKey() (string, error) {
 	length := len(identity.providerKey)
-	minLength := identity.minKeyLength()
+	minLength := 2
 	if length < minLength {
 		return "", ErrInvalidProvider
 	}
-	requiredElements := identity.requiredKeyCharacters()
+	requiredElements := []string{"@"}
 	for _, element := range requiredElements {
 		if !strings.Contains(identity.providerKey, element) {
 			return "", ErrInvalidProvider
 		}
 	}
-	return fmt.Sprintf("providerInfo:%s:%s", identity.providerType, identity.providerKey), nil
+	return RegistryKey(identity), nil
 }
 
-type EmailIdentity struct{}
-type PhoneNumberIdentity struct{}
+type PhoneNumberIdentity struct {
+	BaseIdentity
+}
+
+func (identity PhoneNumberIdentity) IdentityKey() (string, error) {
+	return RegistryKey(identity), nil
+}
