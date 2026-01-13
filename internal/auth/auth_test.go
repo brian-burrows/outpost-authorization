@@ -275,3 +275,21 @@ func TestAddIdentityFailsForInvalidInput(t *testing.T) {
 		t.Errorf("Expected to fail when a second user tries to register another user's third-party keys")
 	}
 }
+
+func TestCreateUserWithPhone(t *testing.T) {
+	auth := NewAuthorizationService()
+
+	// We want this to work
+	phone := "+11235550123"
+	_, err := auth.CreateUser("test@ex.com", "phone", phone, "pass123")
+	if err != nil {
+		t.Fatalf("Expected phone registration to work, got %v", err)
+	}
+
+	// We want this to FAIL (No + sign)
+	invalidPhone := "5550123"
+	_, err = auth.CreateUser("test2@ex.com", "phone", invalidPhone, "pass123")
+	if err == nil {
+		t.Error("Expected error for phone missing +, but it passed")
+	}
+}

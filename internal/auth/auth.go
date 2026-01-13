@@ -55,23 +55,20 @@ func (auth *AuthorizationService) CreateUser(email, providerType, providerKey, c
 	if err != nil {
 		return nil, err
 	}
-	providers := []struct {
-		pType string
-		pKey  string
-	}{
-		{providerType, providerKey},
-		{"email", email},
-		{"UserId", randomId},
+	identities := []Identity{
+		NewIdentity(providerType, providerKey),
+		NewIdentity("email", email),
+		NewIdentity("UserId", randomId),
 	}
 	var keys []string
-	for _, p := range providers {
-		key, err := NewIdentity(p.pType, p.pKey).IdentityKey()
+	for _, identity := range identities {
+		key, err := identity.IdentityKey()
 		if err != nil {
 			return nil, err
 		}
 		_, ok := auth.registry[key]
 		if ok {
-			return nil, &ErrDuplicateField{Field: p.pType, Value: p.pKey}
+			return nil, &ErrDuplicateField{Field: identity.ProviderType(), Value: identity.ProviderKey()}
 		}
 		keys = append(keys, key)
 	}
