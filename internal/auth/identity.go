@@ -13,6 +13,8 @@ func NewIdentity(providerType, providerKey string) Identity {
 	var identity Identity
 	if providerType == "email" {
 		identity = EmailIdentity{BaseIdentity: base}
+	} else if providerType == "phone" {
+		identity = PhoneNumberIdentity{BaseIdentity: base}
 	} else {
 		identity = DefaultIdentity{BaseIdentity: base}
 	}
@@ -71,6 +73,9 @@ type PhoneNumberIdentity struct {
 	BaseIdentity
 }
 
-func (identity PhoneNumberIdentity) IdentityKey() (string, error) {
-	return RegistryKey(identity), nil
+func (id PhoneNumberIdentity) IdentityKey() (string, error) {
+	if !strings.HasPrefix(id.providerKey, "+") {
+		return "", fmt.Errorf("invalid phone: must start with +")
+	}
+	return RegistryKey(id), nil
 }
