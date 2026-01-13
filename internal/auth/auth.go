@@ -4,21 +4,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"strings"
-)
-
-type User struct {
-	ID          string
-	Email       string
-	Credentials map[string]string
-}
-
-var CredentialsRegistry = make(map[string]*User)
-
-var (
-	ErrInvalidEmail    = errors.New("invalid email format")
-	ErrInvalidProvider = errors.New("invalid provider key")
-	randReader         = rand.Read
 )
 
 type ErrDuplicateField struct {
@@ -30,78 +15,133 @@ func (e *ErrDuplicateField) Error() string {
 	return fmt.Sprintf("duplicate %s found: %s", e.Field, e.Value)
 }
 
-func makeRandomIdentifier() (id string, err error) {
-	b := make([]byte, 8)
-	_, err = randReader(b)
-	if err != nil {
-		return "", err
-	}
-	id = fmt.Sprintf("%x", b)
-	return
+type User struct {
+	ID          string
+	Email       string
+	Credentials map[string]string
 }
 
-func CreateUser(email string, providerType string, providerKey string, credential string) (user *User, err error) {
-	validations := []struct {
-		isValid bool
-		err     error
-	}{
-		{len(email) >= 6 && strings.Contains(email, "@"), ErrInvalidEmail},
-		{len(providerKey) >= 1, ErrInvalidProvider},
+var (
+	ErrInvalidEmail    = errors.New("invalid email format")
+	ErrInvalidProvider = errors.New("invalid provider key")
+	randReader         = rand.Read
+)
+
+type AuthorizationService struct {
+	registry    map[string]*User
+	UuidService UuidInterface
+}
+
+func NewAuthorizationService(opts ...func(*AuthorizationService)) *AuthorizationService {
+	service := &AuthorizationService{
+		registry:    make(map[string]*User),
+		UuidService: &RandomIdentifierGenerator{},
 	}
-	for _, v := range validations {
-		if !v.isValid {
-			return nil, fmt.Errorf("creating user: %w", v.err)
-		}
+	for _, o := range opts {
+		o(service)
 	}
-	registrationKey := fmt.Sprintf("reg:%s", email)
-	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
-	// Check if a registered user exists
-	checkFields := []struct {
-		Label string
-		Value string
-	}{
-		{"email", registrationKey},
-		{"providerInfo", providerKeyPath},
+	return service
+}
+
+func WithUuidService(generator UuidInterface) func(*AuthorizationService) {
+	return func(s *AuthorizationService) {
+		s.UuidService = generator
 	}
-	for _, field := range checkFields {
-		_, ok := CredentialsRegistry[field.Value]
-		if ok {
-			return nil, &ErrDuplicateField{Field: field.Label, Value: field.Value}
-		}
-	}
-	id, err := makeRandomIdentifier()
+}
+
+func (auth *AuthorizationService) CreateUser(email, providerType, providerKey, credential string,
+) (user *User, err error) {
+	randomId, err := auth.UuidService.Generate()
 	if err != nil {
 		return nil, err
 	}
+	identities := []Identity{
+		NewIdentity(providerType, providerKey),
+		NewIdentity("email", email),
+		NewIdentity("UserId", randomId),
+	}
+	var keys []string
+	for _, identity := range identities {
+		key, err := identity.IdentityKey()
+		if err != nil {
+			return nil, err
+		}
+		_, ok := auth.registry[key]
+		if ok {
+			return nil, &ErrDuplicateField{Field: identity.ProviderType(), Value: identity.ProviderKey()}
+		}
+		keys = append(keys, key)
+	}
 	user = &User{
-		ID:          id,
+		ID:          randomId,
 		Email:       email,
-		Credentials: map[string]string{providerKeyPath: credential},
+		Credentials: map[string]string{},
 	}
 	// register the user
-	for _, field := range checkFields {
-		CredentialsRegistry[field.Value] = user
+	for _, key := range keys {
+		user.Credentials[key] = credential
+		auth.registry[key] = user
 	}
 	return
 }
 
-func GetUser(email string) (*User, error) {
-	registrationKey := fmt.Sprintf("reg:%s", email)
-	user, ok := CredentialsRegistry[registrationKey]
-	if !ok {
-		return nil, fmt.Errorf("unable to fetch target user using email %s", email)
+func (auth *AuthorizationService) GetUser(email string) (*User, error) {
+	user, err := auth.GetUserByIdentity("email", email)
+	if err != nil {
+		return nil, err
 	}
 	return user, nil
 }
 
-func Login(providerType, providerKey, credential string) (*User, error) {
-	providerKeyPath := fmt.Sprintf("providerInfo:%s:%s", providerType, providerKey)
-	user, ok := CredentialsRegistry[providerKeyPath]
-	if !ok {
-		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
+func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, error) {
+	key, err := NewIdentity(pType, pKey).IdentityKey()
+	if err != nil {
+		return nil, err
 	}
-	if user.Credentials[providerKeyPath] != credential {
-		return nil, fmt.Errorf("unable to authenticate, invalid credentials")
+	if user, ok := auth.registry[key]; ok {
+		return user, nil
 	}
-	return user, nil
+	return nil, fmt.Errorf("Failed to find user by default")
+}
+
+func (auth *AuthorizationService) Login(pType, pKey, credential string) (*User, error) {
+	providerKeyPath, err := NewIdentity(pType, pKey).IdentityKey()
+	if err != nil {
+		return nil, err
+	}
+	user, ok := auth.registry[providerKeyPath]
+	if ok && user.Credentials[providerKeyPath] == credential {
+		return user, nil
+	}
+	return nil, fmt.Errorf("unable to authenticate, invalid credentials")
+}
+
+func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
+	providerKeyPath, err := NewIdentity("UserId", userId).IdentityKey()
+	if err != nil {
+		return nil, err
+	}
+	user, ok := auth.registry[providerKeyPath]
+	if ok {
+		return user, nil
+	}
+	return nil, fmt.Errorf("User ID does not exist")
+}
+
+func (auth *AuthorizationService) AddIdentity(userId, pType, pKey, credential string) error {
+	user, err := auth.findUserById(userId)
+	if err != nil { // user not found
+		return ErrInvalidProvider
+	}
+	providerKeyPath, err := NewIdentity(pType, pKey).IdentityKey()
+	if err != nil {
+		return err
+	}
+	existingUser, ok := auth.registry[providerKeyPath]
+	if ok && existingUser != nil && existingUser.ID != user.ID {
+		return ErrInvalidProvider
+	}
+	user.Credentials[providerKeyPath] = credential
+	auth.registry[providerKeyPath] = user
+	return nil
 }

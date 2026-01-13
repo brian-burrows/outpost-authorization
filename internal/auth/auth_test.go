@@ -6,15 +6,11 @@ import (
 	"testing"
 )
 
-func setup() {
-	CredentialsRegistry = make(map[string]*User)
-}
-
 func TestCreateUser(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	userEmail := "user@example.com"
 	providerKey := "user@example.com"
-	user, err := CreateUser(userEmail, "email", providerKey, "password123")
+	user, err := auth.CreateUser(userEmail, "email", providerKey, "password123")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
 	}
@@ -24,16 +20,14 @@ func TestCreateUser(t *testing.T) {
 }
 
 func TestCreateUserMakesUniqueIDs(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	email := "user@example.com"
 	providerType := "email"
-	providerKey := "hello"
 	credential := "password123"
 	userIDs := make(map[string]bool)
 	for i := 0; i < 100; i++ {
 		uniqueEmail := fmt.Sprintf("%s-%d@example.com", email, i)
-		uniqueKey := fmt.Sprintf("%s-%d", providerKey, i)
-		user, err := CreateUser(uniqueEmail, providerType, uniqueKey, credential)
+		user, err := auth.CreateUser(uniqueEmail, providerType, uniqueEmail, credential)
 		if err != nil {
 			t.Fatalf("Error creating user: %v", err)
 		}
@@ -45,12 +39,10 @@ func TestCreateUserMakesUniqueIDs(t *testing.T) {
 }
 
 func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
-	setup()
-	email := "dup@example.com"
-
-	CreateUser(email, "email", "key1", "pass")
-	_, err := CreateUser(email, "email", "key2", "pass")
-
+	auth := NewAuthorizationService()
+	email := "duplicate@example.com"
+	auth.CreateUser(email, "email", email, "pass")
+	_, err := auth.CreateUser(email, "gmail", "fake-key", "pass")
 	var dupErr *ErrDuplicateField
 	if !errors.As(err, &dupErr) {
 		t.Fatalf("Expected ErrDuplicateField, got %T (%v)", err, err)
@@ -60,24 +52,24 @@ func TestCreateUserForbidsDuplicateEmails(t *testing.T) {
 	}
 }
 func TestCreateUserForbidsDuplicateProviderKeys(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	providerType := "email"
 	credential := "password123"
 	duplicateKey := "key-1"
-	CreateUser("email-1@email.com", providerType, duplicateKey, credential)
-	_, err := CreateUser("email-2@email.com", providerType, duplicateKey, credential)
+	auth.CreateUser("email-1@email.com", providerType, duplicateKey, credential)
+	_, err := auth.CreateUser("email-2@email.com", providerType, duplicateKey, credential)
 	if err == nil {
 		t.Errorf("Expected duplicate email registration to raise an error")
 	}
 }
 
 func TestCreateUserForbidsAddingNewProviderTypes(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	email := "email-1@email.com"
-	CreateUser("email-1@email.com", "firstProviderType", "randomkey", "credential")
+	auth.CreateUser("email-1@email.com", "firstProviderType", "randomkey", "credential")
 	providers := map[string]string{"A": "1", "B": "2", "C": "3"}
 	for pType, pKey := range providers {
-		_, err := CreateUser(email, pType, pKey, "credential")
+		_, err := auth.CreateUser(email, pType, pKey, "credential")
 		if err == nil {
 			t.Errorf("adding a new provider type using create user function should fail %s: %v", pType, err)
 		}
@@ -85,38 +77,37 @@ func TestCreateUserForbidsAddingNewProviderTypes(t *testing.T) {
 }
 
 func TestCreateUserRequiresNonEmptyFields(t *testing.T) {
-	setup()
-	_, err := CreateUser("", "email", "key-1", "pass")
+	auth := NewAuthorizationService()
+	_, err := auth.CreateUser("", "email", "key-1", "pass")
 	if err == nil {
 		t.Error("Expected error for empty email, but user was created")
 	}
-	_, err = CreateUser("user@ex.com", "email", "", "pass")
+	_, err = auth.CreateUser("user@ex.com", "email", "", "pass")
 	if err == nil {
 		t.Error("Expected error for empty provider key, but user was created")
 	}
 }
 
 func TestCreateUserIsAtomic(t *testing.T) {
-	setup()
-	CreateUser("original@ex.com", "email", "key-conflict", "pass")
-	newEmail := "new-potential-user@ex.com"
-	_, err := CreateUser(newEmail, "email", "key-conflict", "pass")
+	auth := NewAuthorizationService()
+	auth.CreateUser("original@ex.com", "gmail", "key-conflict", "pass")
+	_, err := auth.CreateUser("new-potential-user@ex.com", "gmail", "key-conflict", "pass")
 	if err == nil {
 		t.Fatal("Expected error due to duplicate provider key, but got nil")
 	}
-	_, err = CreateUser(newEmail, "email", "valid-key", "pass")
+	_, err = auth.CreateUser("new-potential-user@ex.com", "gmail", "valid-key", "pass")
 	if err != nil {
 		t.Errorf("Atomicity failure: %v. The email was 'locked' even though registration failed.", err)
 	}
 }
 
 func TestGetUserRetrievesCreatedUser(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	providerType := "email"
 	emails := []string{"1@ex.com", "2@email.com", "3@email.com"}
 	for _, userEmail := range emails {
-		CreateUser(userEmail, providerType, userEmail, "auth-credential")
-		user, err := GetUser(userEmail)
+		auth.CreateUser(userEmail, providerType, userEmail, "auth-credential")
+		user, err := auth.GetUser(userEmail)
 		if err != nil {
 			t.Fatalf("failed to fetch user that was just created")
 		}
@@ -127,67 +118,95 @@ func TestGetUserRetrievesCreatedUser(t *testing.T) {
 }
 
 func TestLoginReturnsCorrect(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	email := "me@email.com"
 	providerType := "google"
 	providerKey := "my-provider-key"
 	credential := "my-credentials"
-	CreateUser(email, providerType, providerKey, credential)
-	user, err := Login(providerType, providerKey, credential)
+	auth.CreateUser(email, providerType, providerKey, credential)
+	user, err := auth.Login(providerType, providerKey, credential)
 	if err != nil {
 		t.Errorf("Unable to locate user using %s, %s, %s", providerType, providerKey, credential)
 	}
 	if user.Email != email {
 		t.Errorf("fetched %s when expecting %s", email, user.Email)
 	}
-	user, err = Login(providerType, providerKey, "invalid-credentials")
+	user, err = auth.Login(providerType, providerKey, "invalid-credentials")
 	if err == nil {
 		t.Errorf("fetched user %s, but expected failure due to invalid credentials", user.Email)
 	}
 }
 
 func TestLoginHandlesMissingUser(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	providerType := "google"
 	providerKey := "my-provider-key"
 	credential := "my-credentials"
-	_, err := Login(providerType, providerKey, credential)
+	_, err := auth.Login(providerType, providerKey, credential)
 	if err == nil {
 		t.Errorf("Should have been unable to locate non-existant user %s, %s, %s", providerType, providerKey, credential)
 	}
 }
 
 func TestCreateUserHandlesInvalidEmailFormat(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	email := "invalid-email"
-	_, err := CreateUser(email, "email", "key-conflict", "pass")
+	_, err := auth.CreateUser(email, "email", "key-conflict", "pass")
 	if err == nil {
 		t.Errorf("Email address should contain an @, creation with email='%s' should have failed", email)
 	}
 }
 
 func TestGetUserHandlesMissingUser(t *testing.T) {
-	setup()
+	auth := NewAuthorizationService()
 	email := "missing-user@gmail.com"
-	_, err := GetUser(email)
+	_, err := auth.GetUser(email)
 	if err == nil {
 		t.Errorf("Missing email should return an error upon fetch")
 	}
 }
 
-func TestCreateUserHandlesRandomFailure(t *testing.T) {
-	setup()
-	oldReader := randReader
-	defer func() { randReader = oldReader }()
-	randReader = func(b []byte) (int, error) {
-		return 0, errors.New("randomness failed")
-	}
-	_, err := CreateUser("test@example.com", "email", "key", "pass")
+type errorUuidService struct{}
+
+func (g *errorUuidService) Generate() (string, error) {
+	return "", errors.New("randomness failed")
+}
+
+func TestCreateUserHandlesFailureToCreateRandomIdentifier(t *testing.T) {
+	auth := NewAuthorizationService(WithUuidService(&errorUuidService{}))
+	_, err := auth.CreateUser("test@example.com", "email", "key", "pass")
 	if err == nil {
 		t.Error("Expected error when random identifier generation fails, but got nil")
 	}
 }
 
+func TestIdentityKeyErrorsOnEmptyKey(t *testing.T) {
+	auth := NewAuthorizationService()
+	_, err := auth.CreateUser("test@example.com", "google", "", "pass")
+	if err == nil {
+		t.Errorf("Expected ProviderKey validation to error on empty key")
+	}
+	_, err = auth.GetUserByIdentity("google", "")
+	if err == nil {
+		t.Errorf("Expected ProviderKey validation to error on empty key")
+	}
+	_, err = auth.Login("google", "", "credential")
+	if err == nil {
+		t.Errorf("Expected ProviderKey validation to error on empty key")
+	}
+}
+
+func TestFindingMissingUserFails(t *testing.T) {
+	auth := NewAuthorizationService()
+	_, err := auth.findUserById("missing-user")
+	if err == nil {
+		t.Errorf("Should not be able to locate missing user")
+	}
+	_, err = auth.findUserById("")
+	if err == nil {
+		t.Errorf("Should not be able to locate missing user")
+	}
+}
 func TestErrDuplicateFieldFormatting(t *testing.T) {
 	// 1. Create the error manually
 	customErr := &ErrDuplicateField{
@@ -211,5 +230,66 @@ func TestErrDuplicateFieldFormatting(t *testing.T) {
 
 	if target.Field != "email" {
 		t.Errorf("Expected field 'email', got '%s'", target.Field)
+	}
+}
+
+func TestLinkMultipleProvidersToSameUser(t *testing.T) {
+	auth := NewAuthorizationService()
+	oldProviderType := "email"
+	oldProviderKey := "user@example.com"
+	oldProviderCredentials := "password123"
+	newProviderType := "google"
+	newProviderKey := "my-google-key"
+	newProviderCredentials := "my-google-token"
+	user, _ := auth.CreateUser(oldProviderKey, oldProviderType, oldProviderKey, oldProviderCredentials)
+	err := auth.AddIdentity(user.ID, newProviderType, newProviderKey, newProviderCredentials)
+	if err != nil {
+		t.Errorf("Expected to successfully add a new identity to existing user")
+	}
+	user2, err := auth.GetUserByIdentity(newProviderType, newProviderKey)
+	if err != nil {
+		t.Fatalf(err.Error())
+	} else if user2 == nil {
+		t.Fatal("user2 is nil; identity was likely not saved to the registry")
+	} else if user2.ID != user.ID {
+		t.Errorf("Expected to fetch the same user based on the new identity")
+	}
+}
+
+func TestAddIdentityFailsForInvalidInput(t *testing.T) {
+	auth := NewAuthorizationService()
+	err := auth.AddIdentity("fakeUserId", "gmail", "gmail-key", "gmail-token")
+	if err == nil {
+		t.Errorf("Expected to fail to lookup an invalid user when adding new Identity")
+	}
+	user, err := auth.CreateUser("me-email@gmail.com", "gmail", "gmail-key", "gmail-token")
+	fmt.Printf("Trying to add identity\n")
+	err = auth.AddIdentity(user.ID, "gmail", "", "gmail-token")
+	if err == nil {
+		t.Errorf("Expected to fail to add Identity with empty info")
+	}
+	user, err = auth.CreateUser("second-user@gmail.com", "gmail-2", "gmail-key-2", "gmail-token-2")
+	// Try to use other person's info
+	err = auth.AddIdentity(user.ID, "gmail", "gmail-key", "gmail-token")
+	if err == nil {
+		t.Errorf("Expected to fail when a second user tries to register another user's third-party keys")
+	}
+}
+
+func TestCreateUserWithPhone(t *testing.T) {
+	auth := NewAuthorizationService()
+
+	// We want this to work
+	phone := "+11235550123"
+	_, err := auth.CreateUser("test@ex.com", "phone", phone, "pass123")
+	if err != nil {
+		t.Fatalf("Expected phone registration to work, got %v", err)
+	}
+
+	// We want this to FAIL (No + sign)
+	invalidPhone := "5550123"
+	_, err = auth.CreateUser("test2@ex.com", "phone", invalidPhone, "pass123")
+	if err == nil {
+		t.Error("Expected error for phone missing +, but it passed")
 	}
 }

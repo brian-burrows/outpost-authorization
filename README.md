@@ -87,3 +87,7 @@ So, it can be useful to aggregate these.
 - Avg ABC per function
 - Max ABC
 - Function count
+
+## Some helpful style guidelines
+
+https://github.com/uber-go/guide/blob/master/style.md
