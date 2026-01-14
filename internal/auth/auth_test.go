@@ -305,3 +305,18 @@ func TestCreateUserWithPhone(t *testing.T) {
 		t.Error("Expected error for phone missing +, but it passed")
 	}
 }
+
+func TestSwapRegistry(t *testing.T) {
+
+	repo1 := InMemoryUserRepository{registry: map[string]*User{}}
+	repo2 := InMemoryUserRepository{registry: map[string]*User{}}
+	auth := NewAuthorizationService(WithRepository(repo1))
+	auth2 := NewAuthorizationService(WithRepository(repo2))
+	userEmail := "user@example.com"
+	providerKey := "user@example.com"
+	user, err := auth.CreateUser(userEmail, "email", providerKey, password("password123"))
+	user, err = auth2.findUserById(user.ID)
+	if err == nil {
+		t.Errorf("Expected to not find any users in second repo")
+	}
+}

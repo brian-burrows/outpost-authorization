@@ -13,7 +13,7 @@ type InMemoryUserRepository struct {
 	registry map[string]*User
 }
 
-func (repo *InMemoryUserRepository) Find(pType, pKey string) (*User, error) {
+func (repo InMemoryUserRepository) Find(pType, pKey string) (*User, error) {
 	key, err := NewIdentity(pType, pKey).IdentityKey()
 	if err != nil {
 		return nil, err
@@ -24,7 +24,7 @@ func (repo *InMemoryUserRepository) Find(pType, pKey string) (*User, error) {
 	return nil, fmt.Errorf("user not found for %s:%s", pType, pKey)
 }
 
-func (repo *InMemoryUserRepository) Save(user *User) error {
+func (repo InMemoryUserRepository) Save(user *User) error {
 	for _, identity := range user.Identities {
 		_, err := identity.IdentityKey()
 		if err != nil {

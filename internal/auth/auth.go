@@ -22,14 +22,12 @@ var (
 )
 
 type AuthorizationService struct {
-	registry    map[string]*User
 	UuidService UuidInterface
 	repo        UserRepository
 }
 
 func NewAuthorizationService(opts ...func(*AuthorizationService)) *AuthorizationService {
 	service := &AuthorizationService{
-		registry:    make(map[string]*User),
 		UuidService: &RandomIdentifierGenerator{},
 		repo:        &InMemoryUserRepository{registry: map[string]*User{}},
 	}
