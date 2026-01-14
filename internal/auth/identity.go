@@ -41,12 +41,18 @@ func NewIdentity(providerType, providerKey string, identityOpts ...IdentityOptio
 func (b baseIdentity) ProviderType() string     { return b.providerType }
 func (b baseIdentity) ProviderKey() string      { return b.providerKey }
 func (b baseIdentity) Credentials() Credentials { return b.credentials }
+func (b baseIdentity) Matches(providerType, providerKey string) bool {
+	return providerType == b.ProviderType() && providerKey == b.ProviderKey()
+}
+func (b baseIdentity) Validate(attempt string) bool { return b.credentials.IsValid(attempt) }
 
 type Identity interface {
 	IdentityKey() (string, error)
 	ProviderType() string
 	ProviderKey() string
 	Credentials() Credentials
+	Matches(providerType, providerKey string) bool
+	Validate(attempt string) bool
 }
 
 func RegistryKey(id Identity) string {

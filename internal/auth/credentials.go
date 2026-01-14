@@ -5,26 +5,32 @@ import "time"
 func NewCredentials() {}
 
 type Credentials interface {
-	IsValid(credential string) bool
+	IsValid(attempt string) bool
 }
 
-type passwordCredentials struct {
-	HashedPassword string
+type NoCredentials struct{}
+
+func (pc NoCredentials) IsValid(attempt string) bool {
+	return false
 }
 
-func (pc passwordCredentials) IsValid(credential string) bool {
+type PasswordCredentials struct {
+	hashedPassword string
+}
+
+func (pc PasswordCredentials) IsValid(attempt string) bool {
 	// todo: add password hashing
-	return pc.HashedPassword == credential
+	return pc.hashedPassword == attempt
 }
 
-type oAuthCredentials struct {
+type OauthCredentials struct {
 	accessToken  string
 	refreshToken string
 	expiry       time.Time
 	tokenType    string
 }
 
-func (pc oAuthCredentials) IsValid(credential string) bool {
-	// todo: add complex logic here
-	return pc.accessToken == credential
+func (pc OauthCredentials) IsValid(attempt string) bool {
+	// todo, ensure that the accessToken hasn't expired. Try to refresh?
+	return pc.accessToken == attempt
 }
