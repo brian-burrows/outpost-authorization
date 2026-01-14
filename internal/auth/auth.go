@@ -19,6 +19,7 @@ type User struct {
 	ID          string
 	Email       string
 	Credentials map[string]string
+	Identities  []Identity
 }
 
 var (
@@ -76,6 +77,7 @@ func (auth *AuthorizationService) CreateUser(email, providerType, providerKey, c
 		ID:          randomId,
 		Email:       email,
 		Credentials: map[string]string{},
+		Identities:  identities,
 	}
 	// register the user
 	for _, key := range keys {
