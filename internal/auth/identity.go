@@ -23,6 +23,7 @@ func NewIdentity(providerType, providerKey string, identityOpts ...IdentityOptio
 	base := baseIdentity{
 		providerType: providerType,
 		providerKey:  providerKey,
+		credentials:  NoCredentials{},
 	}
 	for _, opt := range identityOpts {
 		opt(&base)
