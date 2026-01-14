@@ -30,6 +30,23 @@ func (u *User) Authenticate(providerType, providerKey, attempt string) bool {
 	return false
 }
 
+func (u *User) AddIdentity(identity Identity) *User {
+	newIdentities := make([]Identity, 0, len(u.Identities)+1)
+	found := false
+	for _, userAlias := range u.Identities {
+		if userAlias.Matches(identity.ProviderType(), identity.ProviderKey()) {
+			newIdentities = append(newIdentities, identity)
+			found = true
+		} else {
+			newIdentities = append(newIdentities, userAlias)
+		}
+	}
+	if !found {
+		newIdentities = append(newIdentities, identity)
+	}
+	return &User{ID: u.ID, Email: u.Email, Identities: newIdentities}
+}
+
 var (
 	ErrInvalidEmail    = errors.New("invalid email format")
 	ErrInvalidProvider = errors.New("invalid provider key")
@@ -147,14 +164,6 @@ func (auth *AuthorizationService) AddIdentity(userId, pType, pKey string, creden
 	if err != nil {
 		return err
 	}
-	providerKeyPath, err := newIdentity.IdentityKey()
-	if err != nil {
-		return err
-	}
-	if otherUser, ok := auth.registry[providerKeyPath]; ok && user.ID != otherUser.ID {
-		return fmt.Errorf("Unable to add an additional ")
-	}
-	user.Identities = append(user.Identities, newIdentity)
-	auth.registry[providerKeyPath] = user
-	return nil
+	updatedUser := user.AddIdentity(newIdentity)
+	return auth.save(updatedUser)
 }
