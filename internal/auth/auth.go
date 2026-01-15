@@ -15,12 +15,6 @@ func (e *ErrDuplicateField) Error() string {
 	return fmt.Sprintf("duplicate %s found: %s", e.Field, e.Value)
 }
 
-type User struct {
-	ID          string
-	Email       string
-	Credentials map[string]string
-}
-
 var (
 	ErrInvalidEmail    = errors.New("invalid email format")
 	ErrInvalidProvider = errors.New("invalid provider key")
@@ -28,19 +22,25 @@ var (
 )
 
 type AuthorizationService struct {
-	registry    map[string]*User
 	UuidService UuidInterface
+	repo        UserRepository
 }
 
 func NewAuthorizationService(opts ...func(*AuthorizationService)) *AuthorizationService {
 	service := &AuthorizationService{
-		registry:    make(map[string]*User),
 		UuidService: &RandomIdentifierGenerator{},
+		repo:        &InMemoryUserRepository{registry: map[string]*User{}},
 	}
 	for _, o := range opts {
 		o(service)
 	}
 	return service
+}
+
+func WithRepository(repository UserRepository) func(*AuthorizationService) {
+	return func(s *AuthorizationService) {
+		s.repo = repository
+	}
 }
 
 func WithUuidService(generator UuidInterface) func(*AuthorizationService) {
@@ -49,38 +49,30 @@ func WithUuidService(generator UuidInterface) func(*AuthorizationService) {
 	}
 }
 
-func (auth *AuthorizationService) CreateUser(email, providerType, providerKey, credential string,
+func (auth *AuthorizationService) CreateUser(
+	email,
+	providerType,
+	providerKey string,
+	credential Credentials,
+
 ) (user *User, err error) {
 	randomId, err := auth.UuidService.Generate()
 	if err != nil {
 		return nil, err
 	}
 	identities := []Identity{
-		NewIdentity(providerType, providerKey),
-		NewIdentity("email", email),
-		NewIdentity("UserId", randomId),
-	}
-	var keys []string
-	for _, identity := range identities {
-		key, err := identity.IdentityKey()
-		if err != nil {
-			return nil, err
-		}
-		_, ok := auth.registry[key]
-		if ok {
-			return nil, &ErrDuplicateField{Field: identity.ProviderType(), Value: identity.ProviderKey()}
-		}
-		keys = append(keys, key)
+		NewIdentity(providerType, providerKey, WithCredentials(credential)),
+		NewIdentity("email", email, WithCredentials(credential)),
+		NewIdentity("UserId", randomId, WithCredentials(credential)),
 	}
 	user = &User{
-		ID:          randomId,
-		Email:       email,
-		Credentials: map[string]string{},
+		ID:         randomId,
+		Email:      email,
+		Identities: identities,
 	}
-	// register the user
-	for _, key := range keys {
-		user.Credentials[key] = credential
-		auth.registry[key] = user
+	err = auth.repo.Save(user)
+	if err != nil {
+		return nil, err
 	}
 	return
 }
@@ -94,54 +86,29 @@ func (auth *AuthorizationService) GetUser(email string) (*User, error) {
 }
 
 func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, error) {
-	key, err := NewIdentity(pType, pKey).IdentityKey()
-	if err != nil {
-		return nil, err
-	}
-	if user, ok := auth.registry[key]; ok {
-		return user, nil
-	}
-	return nil, fmt.Errorf("Failed to find user by default")
+	return auth.repo.Find(pType, pKey)
 }
 
-func (auth *AuthorizationService) Login(pType, pKey, credential string) (*User, error) {
-	providerKeyPath, err := NewIdentity(pType, pKey).IdentityKey()
-	if err != nil {
-		return nil, err
-	}
-	user, ok := auth.registry[providerKeyPath]
-	if ok && user.Credentials[providerKeyPath] == credential {
+func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
+	return auth.repo.Find("UserId", userId)
+}
+
+func (auth *AuthorizationService) Login(pType, pKey string, credential string) (*User, error) {
+	if user, err := auth.repo.Find(pType, pKey); err == nil && user.Authenticate(pType, pKey, credential) {
 		return user, nil
 	}
 	return nil, fmt.Errorf("unable to authenticate, invalid credentials")
 }
 
-func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
-	providerKeyPath, err := NewIdentity("UserId", userId).IdentityKey()
-	if err != nil {
-		return nil, err
-	}
-	user, ok := auth.registry[providerKeyPath]
-	if ok {
-		return user, nil
-	}
-	return nil, fmt.Errorf("User ID does not exist")
-}
-
-func (auth *AuthorizationService) AddIdentity(userId, pType, pKey, credential string) error {
+func (auth *AuthorizationService) AddIdentity(userId, pType, pKey string, credential Credentials) error {
 	user, err := auth.findUserById(userId)
 	if err != nil { // user not found
 		return ErrInvalidProvider
 	}
-	providerKeyPath, err := NewIdentity(pType, pKey).IdentityKey()
+	newIdentity := NewIdentity(pType, pKey, WithCredentials(credential))
 	if err != nil {
 		return err
 	}
-	existingUser, ok := auth.registry[providerKeyPath]
-	if ok && existingUser != nil && existingUser.ID != user.ID {
-		return ErrInvalidProvider
-	}
-	user.Credentials[providerKeyPath] = credential
-	auth.registry[providerKeyPath] = user
-	return nil
+	updatedUser := user.AddIdentity(newIdentity)
+	return auth.repo.Save(updatedUser)
 }
