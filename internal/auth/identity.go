@@ -19,7 +19,11 @@ func WithCredentials(credentials Credentials) IdentityOption {
 	}
 }
 
-func NewIdentity(providerType, providerKey string, identityOpts ...IdentityOption) Identity {
+func NewIdentity(
+	providerType,
+	providerKey string,
+	identityOpts ...IdentityOption,
+) Identity {
 	base := baseIdentity{
 		providerType: providerType,
 		providerKey:  providerKey,
