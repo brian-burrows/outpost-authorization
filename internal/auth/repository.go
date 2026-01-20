@@ -1,23 +1,22 @@
 package auth
 
 import (
+	"context"
 	"fmt"
-
-	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
 func NewDatabase() {}
 
 type UserRepository interface {
-	Find(pType, pKey string) (*User, error)
-	Save(user *User) error
+	Find(ctx context.Context, pType, pKey string) (*User, error)
+	Save(ctx context.Context, user *User) error
 }
 
 type InMemoryUserRepository struct {
 	registry map[string]*User
 }
 
-func (repo InMemoryUserRepository) Find(pType, pKey string) (*User, error) {
+func (repo InMemoryUserRepository) Find(ctx context.Context, pType, pKey string) (*User, error) {
 	key, err := NewIdentity(pType, pKey).IdentityKey()
 	if err != nil {
 		return nil, err
@@ -27,14 +26,13 @@ func (repo InMemoryUserRepository) Find(pType, pKey string) (*User, error) {
 	}
 	return nil, fmt.Errorf("user not found for %s:%s", pType, pKey)
 }
-
-func (repo InMemoryUserRepository) Save(user *User) error {
+func (repo InMemoryUserRepository) Save(ctx context.Context, user *User) error {
 	for _, identity := range user.Identities {
 		_, err := identity.IdentityKey()
 		if err != nil {
 			return err
 		}
-		existing, err := repo.Find(identity.ProviderType(), identity.ProviderKey())
+		existing, err := repo.Find(ctx, identity.ProviderType(), identity.ProviderKey())
 		if err == nil && existing.ID != user.ID {
 			return &ErrDuplicateField{Field: identity.ProviderType(), Value: identity.ProviderKey()}
 		}
@@ -43,17 +41,5 @@ func (repo InMemoryUserRepository) Save(user *User) error {
 		key, _ := identity.IdentityKey()
 		repo.registry[key] = user
 	}
-	return nil
-}
-
-type MongoUserRepository struct {
-	client *mongo.Client
-}
-
-func (repo MongoUserRepository) Find(pType, pKey string) (*User, error) {
-	return &User{ID: "user-123"}, nil
-}
-
-func (repo MongoUserRepository) Save(user *User) error {
 	return nil
 }

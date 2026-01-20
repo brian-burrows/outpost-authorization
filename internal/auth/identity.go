@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/mail"
 	"strings"
+
+	"go.mongodb.org/mongo-driver/v2/bson"
 )
 
 type baseIdentity struct {
@@ -51,6 +53,16 @@ func (b baseIdentity) Matches(providerType, providerKey string) bool {
 	return providerType == b.ProviderType() && providerKey == b.ProviderKey()
 }
 func (b baseIdentity) Validate(attempt string) bool { return b.credentials.IsValid(attempt) }
+func (b baseIdentity) MarshalBSON() ([]byte, error) {
+	return bson.Marshal(struct {
+		Type string `bson:"provider_type"`
+		Key  string `bson:"provider_key"`
+		// We can add credentials here later if needed
+	}{
+		Type: b.providerType,
+		Key:  b.providerKey,
+	})
+}
 
 type Identity interface {
 	IdentityKey() (string, error)
@@ -59,6 +71,7 @@ type Identity interface {
 	Credentials() Credentials
 	Matches(providerType, providerKey string) bool
 	Validate(attempt string) bool
+	MarshalBSON() ([]byte, error)
 }
 
 func RegistryKey(id Identity) string {

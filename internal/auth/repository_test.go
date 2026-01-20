@@ -67,10 +67,10 @@ func TestRepositoryContract(t *testing.T) {
 			NewIdentity("email", "test@example.com"),
 		},
 	}
-	if err := repo.Save(user); err != nil {
+	if err := repo.Save(ctx, user); err != nil {
 		t.Fatalf("expected no error on save, got %v", err)
 	}
-	found, err := repo.Find("email", "test@example.com")
+	found, err := repo.Find(ctx, "email", "test@example.com")
 	if err != nil {
 		t.Fatalf("expected to find user, got %v", err)
 	}
@@ -84,8 +84,9 @@ func TestMongoRepository(t *testing.T) {
 	client, teardown := setupMongo(ctx, t)
 	defer teardown()
 	repo := MongoUserRepository{client: client}
+	repo.Initialize(ctx)
 	user := &User{ID: "user-123"}
-	err := repo.Save(user)
+	err := repo.Save(ctx, user)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
