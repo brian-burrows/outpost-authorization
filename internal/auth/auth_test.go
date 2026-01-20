@@ -256,7 +256,7 @@ func TestLinkMultipleProvidersToSameUser(t *testing.T) {
 	}
 	user2, err := auth.GetUserByIdentity(newProviderType, newProviderKey)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatalf("Expected tot fetch user by identity")
 	} else if user2 == nil {
 		t.Fatal("user2 is nil; identity was likely not saved to the registry")
 	} else if user2.ID != user.ID {
