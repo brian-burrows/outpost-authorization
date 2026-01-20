@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -49,12 +50,12 @@ func WithUuidService(generator UuidInterface) func(*AuthorizationService) {
 	}
 }
 
-func (auth *AuthorizationService) CreateUser(
+func (auth *AuthorizationService) CreateUserCtx(
+	ctx context.Context,
 	email,
 	providerType,
 	providerKey string,
 	credential Credentials,
-
 ) (user *User, err error) {
 	randomId, err := auth.UuidService.Generate()
 	if err != nil {
@@ -70,38 +71,38 @@ func (auth *AuthorizationService) CreateUser(
 		Email:      email,
 		Identities: identities,
 	}
-	err = auth.repo.Save(user)
+	err = auth.repo.Save(ctx, user)
 	if err != nil {
 		return nil, err
 	}
 	return
 }
 
-func (auth *AuthorizationService) GetUser(email string) (*User, error) {
-	user, err := auth.GetUserByIdentity("email", email)
+func (auth *AuthorizationService) GetUser(ctx context.Context, email string) (*User, error) {
+	user, err := auth.GetUserByIdentity(ctx, "email", email)
 	if err != nil {
 		return nil, err
 	}
 	return user, nil
 }
 
-func (auth *AuthorizationService) GetUserByIdentity(pType, pKey string) (*User, error) {
-	return auth.repo.Find(pType, pKey)
+func (auth *AuthorizationService) GetUserByIdentity(ctx context.Context, pType, pKey string) (*User, error) {
+	return auth.repo.Find(ctx, pType, pKey)
 }
 
-func (auth *AuthorizationService) findUserById(userId string) (*User, error) {
-	return auth.repo.Find("UserId", userId)
+func (auth *AuthorizationService) findUserById(ctx context.Context, userId string) (*User, error) {
+	return auth.repo.Find(ctx, "UserId", userId)
 }
 
-func (auth *AuthorizationService) Login(pType, pKey string, credential string) (*User, error) {
-	if user, err := auth.repo.Find(pType, pKey); err == nil && user.Authenticate(pType, pKey, credential) {
+func (auth *AuthorizationService) Login(ctx context.Context, pType, pKey string, credential string) (*User, error) {
+	if user, err := auth.repo.Find(ctx, pType, pKey); err == nil && user.Authenticate(pType, pKey, credential) {
 		return user, nil
 	}
 	return nil, fmt.Errorf("unable to authenticate, invalid credentials")
 }
 
-func (auth *AuthorizationService) AddIdentity(userId, pType, pKey string, credential Credentials) error {
-	user, err := auth.findUserById(userId)
+func (auth *AuthorizationService) AddIdentity(ctx context.Context, userId, pType, pKey string, credential Credentials) error {
+	user, err := auth.findUserById(ctx, userId)
 	if err != nil { // user not found
 		return ErrInvalidProvider
 	}
@@ -110,5 +111,5 @@ func (auth *AuthorizationService) AddIdentity(userId, pType, pKey string, creden
 		return err
 	}
 	updatedUser := user.AddIdentity(newIdentity)
-	return auth.repo.Save(updatedUser)
+	return auth.repo.Save(ctx, updatedUser)
 }
