@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"net/mail"
 	"strings"
 )
 
@@ -80,16 +81,12 @@ type emailIdentity struct {
 }
 
 func (identity emailIdentity) IdentityKey() (string, error) {
-	length := len(identity.providerKey)
-	minLength := 2
-	if length < minLength {
-		return "", ErrInvalidProvider
+	addr, err := mail.ParseAddress(identity.providerKey)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrInvalidProvider, err)
 	}
-	requiredElements := []string{"@"}
-	for _, element := range requiredElements {
-		if !strings.Contains(identity.providerKey, element) {
-			return "", ErrInvalidProvider
-		}
+	if addr.Address != identity.providerKey {
+		return "", fmt.Errorf("%w: email must be in raw format (user@domain.com)", ErrInvalidProvider)
 	}
 	return RegistryKey(identity), nil
 }
@@ -98,9 +95,16 @@ type phoneNumberIdentity struct {
 	baseIdentity
 }
 
-func (id phoneNumberIdentity) IdentityKey() (string, error) {
-	if !strings.HasPrefix(id.providerKey, "+") {
-		return "", fmt.Errorf("invalid phone: must start with +")
+func (identity phoneNumberIdentity) IdentityKey() (string, error) {
+	key := identity.providerKey
+	if !strings.HasPrefix(key, "+") || len(key) < 8 {
+		return "", fmt.Errorf("invalid phone: must be in E.164 format (e.g., +1234567890)")
 	}
-	return RegistryKey(id), nil
+	digitsOnly := strings.TrimPrefix(key, "+")
+	for _, r := range digitsOnly {
+		if r < '0' || r > '9' {
+			return "", fmt.Errorf("invalid phone: contains non-digit characters")
+		}
+	}
+	return RegistryKey(identity), nil
 }

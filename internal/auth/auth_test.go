@@ -25,12 +25,11 @@ func TestCreateUser(t *testing.T) {
 
 func TestCreateUserMakesUniqueIDs(t *testing.T) {
 	auth := NewAuthorizationService()
-	email := "user@example.com"
 	providerType := "email"
 	credential := password("password123")
 	userIDs := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		uniqueEmail := fmt.Sprintf("%s-%d@example.com", email, i)
+		uniqueEmail := fmt.Sprintf("user-%d@example.com", i)
 		user, err := auth.CreateUser(uniqueEmail, providerType, uniqueEmail, credential)
 		if err != nil {
 			t.Fatalf("Error creating user: %v", err)

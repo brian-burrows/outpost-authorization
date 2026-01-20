@@ -1,6 +1,10 @@
 package auth
 
-import "fmt"
+import (
+	"fmt"
+
+	"go.mongodb.org/mongo-driver/v2/mongo"
+)
 
 func NewDatabase() {}
 
@@ -39,5 +43,17 @@ func (repo InMemoryUserRepository) Save(user *User) error {
 		key, _ := identity.IdentityKey()
 		repo.registry[key] = user
 	}
+	return nil
+}
+
+type MongoUserRepository struct {
+	client *mongo.Client
+}
+
+func (repo MongoUserRepository) Find(pType, pKey string) (*User, error) {
+	return &User{ID: "user-123"}, nil
+}
+
+func (repo MongoUserRepository) Save(user *User) error {
 	return nil
 }

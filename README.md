@@ -176,7 +176,6 @@ Works exactly like the standard Refresh flow.
   "_id": ObjectId("..."),
   "email": "user@example.com", // The unique "anchor" for the account
   "name": "Jane Doe",
-  "avatar": "https://...",
   "sessions": [
     {
         "token": "abc...",
@@ -197,13 +196,13 @@ Works exactly like the standard Refresh flow.
       "providerKey": "user@example.com",
       "credential": "$2b$12$Kls...", // Only used for password login
       "lastUsed": ISODate("2024-05-01..."),
-      "isVerified": true
+      "isVerified": true,
     },
     {
       "providerType": "google",
       "providerKey": "1034567890123456789", // Google's 'sub' field (Subject ID)
-      "lastUsed": ISODate("2024-05-10..."),
       "credential": null,
+      "lastUsed": ISODate("2024-05-10..."),
       "isVerified": true,
     }
   ],
